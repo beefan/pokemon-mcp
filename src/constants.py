@@ -8,6 +8,11 @@ PARTY_COUNT_ADDR = 0xD163
 NAMING_SCREEN_ADDR = 0xD116 # 0 = Normal, 1 = Player, 2 = Rival
 MENU_STATE_ADDR = 0xD05C    # Non-zero when a menu is open
 
+# Hardware Registers
+LCDC_ADDR = 0xFF40    # LCD Control
+WY_ADDR = 0xFF4A      # Window Y Position
+WX_ADDR = 0xFF4B      # Window X Position
+
 # Tile IDs (Approximate - need verification during runtime or from docs, using placeholders for now if specific IDs aren't known, 
 # but common ones for Gen 1 are often documented. For now, strict collision logic might rely on the map data tool inspection)
 # We will rely on get_local_map returning 'W', 'P', etc based on map scripts or raw tile ranges. 

@@ -47,21 +47,38 @@ class PokemonEmulator:
         """Read a range of RAM bytes."""
         return [self.read_ram(start_address + i) for i in range(length)]
 
+    def is_window_active(self):
+        """
+        Checks if the hardware Window layer is actually active and visible.
+        LCDC Register (0xFF40): Bit 5 enables the Window.
+        WY Register (0xFF4A): Window Y position (0-143).
+        """
+        lcdc = self.read_ram(LCDC_ADDR)
+        window_enabled = (lcdc & 0x20) != 0
+        wy = self.read_ram(WY_ADDR)
+        
+        # Window is visible if enabled and Y starts within screen bounds
+        # Standard Gen 1 dialogue box has WY=144 (hidden) or WY=104 (row 13).
+        return window_enabled and wy < 144
+
     def is_dialogue_box_on_screen(self):
         """
-        Scans the screen for dialogue box border tiles.
-        Standard Gen 1 border tiles:
-        0x79: Top-Left Corner
-        0x7A: Top-Right Corner
-        0x77: Horizontal Edge
-        The dialogue box top border is at row 12.
+        Scans the window layer for dialogue box border tiles.
+        Only runs if the hardware Window is active.
         """
+        if not self.is_window_active():
+            return False
+
         try:
-            tiles = self.get_screen_tile_ids()
-            # Row 12 is where the dialogue box usually starts
-            tl = tiles[0][12] & 0xFF
-            tr = tiles[19][12] & 0xFF
-            edge = tiles[10][12] & 0xFF
+            # For detection, we scan the RAW window tilemap directly
+            # to avoid Background interference.
+            win_map = self.pyboy.tilemap_window
+            
+            # Dialogue box top border is usually at row 12 or 13 relative to the Window Y.
+            # However, Gen 1 often just keeps it at the bottom of the map.
+            tl = win_map[0, 12] & 0xFF
+            tr = win_map[19, 12] & 0xFF
+            edge = win_map[10, 12] & 0xFF
             
             # Check for corners or a sustained horizontal edge
             is_box = (tl in [0x79, 0xBA, 0x6E] or tr in [0x7A, 0xBA, 0x6E]) or (edge == 0x77)
@@ -73,6 +90,7 @@ class PokemonEmulator:
         """Check if a dialogue box or naming screen is active."""
         ram_active = self.read_ram(DIALOGUE_STATE_ADDR) != 0
         naming_active = self.read_ram(NAMING_SCREEN_ADDR) != 0
+        # Only check visual if the hardware window is on
         visual_active = self.is_dialogue_box_on_screen()
         return ram_active or visual_active or naming_active
         
@@ -145,14 +163,17 @@ class PokemonEmulator:
         return f"Dialogue Progressing. Content:\n{post_text.strip()}"
 
     def get_dialogue_text(self):
-        """Reads the text currently in the dialogue box area (rows 12-16)."""
-        tiles = self.get_screen_tile_ids()
+        """Reads the text specifically from the Window layer (rows 12-16)."""
+        if not self.is_window_active():
+            return ""
+
+        # Use raw Window tiles to avoid Background "bleed-through"
+        win_map = self.pyboy.tilemap_window
         text_lines = []
-        # Indexing is tiles[x][y] in PyBoy
         for y in range(13, 17):
             line = ""
             for x in range(1, 19): 
-                tid = tiles[x][y] & 0xFF
+                tid = win_map[x, y] & 0xFF
                 char = TILE_MAP.get(tid, " ")
                 line += char
             if line.strip():
@@ -331,21 +352,27 @@ class PokemonEmulator:
     def get_screen_tile_ids(self):
         """
         Returns a 20x18 composite tile ID matrix (Window over Background).
+        Accounts for hardware window visibility and position.
         """
         bg = self.get_background_tiles()
-        win = self.get_window_tiles()
         
-        # Composite: If win tile is 0x7F (empty), use BG. 
-        # Note: In Gen 1, 0x7F is the standard "blank" tile.
+        if not self.is_window_active():
+            return bg
+
+        win = self.get_window_tiles()
+        wy = self.read_ram(WY_ADDR)
+        wy_tiles = wy // 8
+        
+        # Composite: Only overlay window tiles where the window is hardware-visible.
+        # Gen 1 dialogue box usually has WY=104 (Start row 13).
         composite = []
         for x in range(20):
             column = []
             for y in range(18):
-                wtid = win[x][y] & 0xFF
-                if wtid == 0x7F: # Space/Transparent
-                    column.append(bg[x][y])
-                else:
+                if y >= wy_tiles:
                     column.append(win[x][y])
+                else:
+                    column.append(bg[x][y])
             composite.append(column)
         return composite
 
