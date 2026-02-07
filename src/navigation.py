@@ -44,15 +44,13 @@ class Navigation:
             
             grid_str = []
             for y in range(18):
-                row = ""
+                row_chars = []
                 for x in range(20):
-                     tid = tile_ids[x][y] & 0xFF # Mask to 8-bit tile ID
-                     # Map ID to Char if known, else relative symbols
-                     char = TILE_MAP.get(tid, None)
-                     if char is None:
-                         char = f"{tid:02X}" if tid != 0 else "."
-                     row += char + " "
-                grid_str.append(row.strip())
+                     tid = tile_ids[x][y] & 0xFF
+                     # Map ID to Char if known
+                     char = TILE_MAP.get(tid, " ") # Default to space instead of None
+                     row_chars.append(char)
+                grid_str.append("".join(row_chars)) # No strip!
             return "\n".join(grid_str)
         except Exception as e:
             return f"Error reading grid: {e}\n(Player at {px}, {py})"
@@ -105,7 +103,32 @@ class Navigation:
         total_path.reverse()
         return total_path[1:] # Exclude start
 
-    def walk_to(self, target_x, target_y, on_battle="interrupt", max_steps=50):
+    def get_player_status(self):
+        """
+        Returns a human-readable status string of the player's current state.
+        """
+        map_id = self.emulator.get_map_id()
+        x, y = self.emulator.get_player_position()
+        
+        # Check for nearby special tiles
+        nearby = []
+        try:
+            tiles = self.emulator.get_screen_tile_ids()
+            # Check 1 tile radius
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    if dx == 0 and dy == 0: continue
+                    tid = tiles[10+dx][9+dy] & 0xFF
+                    char = TILE_MAP.get(tid)
+                    if char == "S": nearby.append("Stairs")
+                    elif char == ">": nearby.append("Exit/Door")
+        except:
+            pass
+        
+        nearby_str = f" [Nearby: {', '.join(set(nearby))}]" if nearby else ""
+        return f"Map ID: {map_id}, Position: ({x}, {y}){nearby_str}"
+
+    def walk_to(self, target_x, target_y, on_battle="interrupt", max_steps=100):
         """
         Navigate to target coordinates.
         Returns reason for stopping: "arrived", "battle", "blocked", "interrupted", "max_steps"
@@ -125,62 +148,45 @@ class Navigation:
             if current_pos == target_pos:
                 return "arrived"
                 
-            # 2. Populate walls from screen if possible (Optimization)
-            # This helps A* find paths faster by avoiding obvious on-screen obstacles
-            try:
-                tile_ids = self.emulator.get_screen_tile_ids()
-                # We don't know the exact global coords of screen tiles without more calc,
-                # but we can at least detect the one we are about to step on.
-            except:
-                pass
-
-            # 3. Check for Battle
-            enemy_hp = self.emulator.read_ram(ENEMY_HP_ADDR)
-            if enemy_hp > 0:
-                # Battle detected!
-                if on_battle == "interrupt":
-                    return "battle_started"
-                elif on_battle == "run":
-                    if self.battle_engine:
-                        self.battle_engine.run_away()
-                        # Allow some time for state change
-                        self.emulator.tick(60)
-                        # Check if battle ended
-                        if self.emulator.read_ram(ENEMY_HP_ADDR) == 0:
-                            continue # Escaped! Continue walking.
-                        else:
-                            return "battle_trapped" # Failed to run
-                    else:
-                        return "error: no battle engine"
-                elif on_battle == "spam_attack":
-                    if self.battle_engine:
-                        self.battle_engine.attack()
-                        self.emulator.tick(60) 
-                        # We need a loop here for spam attack, but doing one turn per walk step is weird.
-                        # The prompt says: "Uses the first move until the battle is won".
-                        # This implies a blocking loop.
-                        while self.emulator.read_ram(ENEMY_HP_ADDR) > 0:
-                            self.battle_engine.attack()
-                            self.emulator.tick(120) 
-                            # Check if we died? 
-                            if self.emulator.read_ram(PARTY_COUNT_ADDR) == 0: # simplified death check
-                                return "blacked_out"
-                        continue # Won!
-                    else:
-                        return "error: no battle engine"
-                else:
-                    return f"unknown policy: {on_battle}"
-
-            # 4. Pathfind
-            path = self.find_path(current_pos, target_pos, known_walls)
+            # 2. Pathfind
+            # Increased node limit for larger maps or complex paths
+            path = self.find_path(current_pos, target_pos, known_walls, max_nodes=1000)
             if not path:
-                return "blocked: no path found"
+                return f"blocked: no path found to ({target_x}, {target_y}) from your current position {current_pos}. Check if you are on an interactive tile (like stairs) and try moving away first."
                 
             next_step = path[0]
             dx = next_step[0] - current_x
             dy = next_step[1] - current_y
             
-            # 5. Execute Move
+            # 3. Check for Battle
+            enemy_hp = self.emulator.read_ram(ENEMY_HP_ADDR)
+            if enemy_hp > 0:
+                if on_battle == "interrupt":
+                    return "battle_started"
+                elif on_battle == "run":
+                    if self.battle_engine:
+                        self.battle_engine.run_away()
+                        self.emulator.tick(60)
+                        if self.emulator.read_ram(ENEMY_HP_ADDR) == 0:
+                            continue 
+                        else:
+                            return "battle_trapped"
+                    else:
+                        return "error: no battle engine"
+                elif on_battle == "spam_attack":
+                    if self.battle_engine:
+                        while self.emulator.read_ram(ENEMY_HP_ADDR) > 0:
+                            self.battle_engine.attack()
+                            self.emulator.tick(120) 
+                            if self.emulator.read_ram(PARTY_COUNT_ADDR) == 0:
+                                return "blacked_out"
+                        continue 
+                    else:
+                        return "error: no battle engine"
+                else:
+                    return f"unknown policy: {on_battle}"
+            
+            # 4. Execute Move
             button = None
             if dy == -1: button = BUTTON_UP
             elif dy == 1: button = BUTTON_DOWN
@@ -188,14 +194,24 @@ class Navigation:
             elif dx == 1: button = BUTTON_RIGHT
             
             if button:
-                self.emulator.input(button, hold_frames=5) # Faster input
+                self.emulator.input(button, hold_frames=5)
+                self.emulator.tick(5) # Stabilization
                 steps_taken += 1
                 
-            # 6. Verify Move
-            new_x, new_y = self.emulator.get_player_position()
-            if (new_x, new_y) == current_pos:
+            # 5. Verify Move
+            new_pos = self.emulator.get_player_position()
+            if new_pos == current_pos:
                 # We didn't move. Blocked!
-                known_walls.add(next_step)
+                try:
+                    tiles = self.emulator.get_screen_tile_ids()
+                    # tx, ty relative to player (10, 9)
+                    tx, ty = 10 + dx, 9 + dy
+                    tid = tiles[tx][ty] & 0xFF
+                    char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
+                    return f"blocked: cannot step on {char} at {next_step}"
+                except:
+                    known_walls.add(next_step)
+                    continue
             
             # Periodic tick to keep emulator healthy
             self.emulator.tick(1)

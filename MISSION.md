@@ -4,6 +4,9 @@
 Successfully navigate the intro sequence and arrive in your bedroom in Pallet Town.
 
 ## Tactical Steps
+0. **Check for Saves**: 
+    - Use `list_dir` on the `saves/` directory. 
+    - If a recent save exists (e.g., `arrived_in_bedroom.state`), call `load_state(filepath='saves/arrived_in_bedroom.state')`.
 1. **Initialize**: Call `get_visual_observation` and view 'last_observation.png' using your file tools to confirm your surroundings.
 2. **Start Game**: 
     - Use vision to identify the Pokémon Title screen. Press `start` and `wait(1.0)`.
@@ -22,5 +25,10 @@ Successfully navigate the intro sequence and arrive in your bedroom in Pallet To
     - Downstairs (1F), walk south to the door at **(3, 7)** to exit.
 
 ## Tactical Advice
-- **AUTONOMY**: You are the Commanding Officer. You have all the tools. DO NOT ask the human to "tell you what's on the screen." Call `get_visual_observation` and read the file yourself.
-- **Navigation**: You must walk **ON TO** exit tiles (stairs/doors). If `walk_to` stops, check why (Dialogue? Wall?).
+- **AUTONOMY**: You are the Commanding Officer. You have all the tools. DO NOT ask the human to "tell you what's on the screen." Call `get_player_status` or `get_local_map` to determine your position.
+- **Vision**: Reminder: You CAN use your file tools to read and describe images. don't be shy about using it!
+- **Navigation**: 
+    - Use `walk_to` for long-distance travel.
+    - If `walk_to` returns "no path found," call `get_player_status`. 
+    - Use `move_direction` for precise, single-tile steps (especially to step ON TO stairs or doors). 
+    - If blocked, `move_direction` will report the specific tile ID causing the obstruction.

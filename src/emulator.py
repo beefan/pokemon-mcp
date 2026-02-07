@@ -175,6 +175,49 @@ class PokemonEmulator:
         self.tick(frames)
         return f"Waited {duration_seconds} seconds."
 
+    def move_direction(self, direction):
+        """
+        Attempts to move one tile in the specified direction.
+        Returns: "success" if moved, or "blocked" if position remained the same.
+        """
+        btn_map = {
+            "up": BUTTON_UP,
+            "down": BUTTON_DOWN,
+            "left": BUTTON_LEFT,
+            "right": BUTTON_RIGHT
+        }
+        button = btn_map.get(direction.lower())
+        if not button:
+            return f"Error: Invalid direction '{direction}'"
+
+        if self.is_dialogue_active():
+            return "blocked: dialogue or menu is active"
+
+        start_x, start_y = self.get_player_position()
+        self.input(button, hold_frames=5)
+        self.tick(10)
+        end_x, end_y = self.get_player_position()
+
+        if (start_x, start_y) == (end_x, end_y):
+            # Try to identify what is blocking from the screen
+            try:
+                tiles = self.get_screen_tile_ids()
+                # Determine which tile we tried to step on relative to player
+                # Player is always in center of screen (10, 9) in PyBoy window
+                tx, ty = 10, 9
+                if direction == "up": ty -= 1
+                elif direction == "down": ty += 1
+                elif direction == "left": tx -= 1
+                elif direction == "right": tx += 1
+                
+                tid = tiles[tx][ty] & 0xFF
+                char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
+                return f"blocked by {char}"
+            except:
+                return "blocked"
+        
+        return "success"
+
     def input(self, button, hold_frames=5):
         """Press and release a button."""
         self.pyboy.button_press(button)

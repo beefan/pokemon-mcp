@@ -59,6 +59,22 @@ async def walk_to(x: int, y: int, on_battle: str = "interrupt") -> str:
     return run_on_main("walk_to", x, y, on_battle)
 
 @mcp.tool()
+async def get_player_status() -> str:
+    """
+    Returns the current Map ID, (X, Y) coordinates, and nearby points of interest.
+    Use this if walk_to fails or if you need to verify your exact position.
+    """
+    return run_on_main("get_player_status")
+
+@mcp.tool()
+async def move_direction(direction: str) -> str:
+    """
+    Attempts to move one tile in the specified direction (up, down, left, right).
+    Returns 'success' or 'blocked by [Tile]'.
+    """
+    return run_on_main("move_direction", direction)
+
+@mcp.tool()
 async def execute_battle_turn(action: str) -> str:
     """Executes a high-level battle action."""
     return run_on_main("execute_battle_turn", action)
@@ -159,6 +175,10 @@ def process_command(func_name, args, kwargs):
     try:
         if func_name == "get_local_map":
             return True, json.dumps(navigation.get_local_map())
+        elif func_name == "get_player_status":
+            return True, str(navigation.get_player_status())
+        elif func_name == "move_direction":
+            return True, str(emulator.move_direction(*args, **kwargs))
         elif func_name == "walk_to":
             return True, navigation.walk_to(*args, **kwargs)
         elif func_name == "execute_battle_turn":

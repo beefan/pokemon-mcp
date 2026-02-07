@@ -26,6 +26,10 @@ BUTTON_RIGHT = "right"
 # Tile ID to Character Mapping (Pokemon Blue English)
 TILE_MAP = {
     0x7F: " ", # Space
+    0x01: ".", # Floor/Grass
+    0x05: "#", # Wall/Solid
+    0x15: "S", # Stairs
+    0x3E: ">", # Door/Exit
     0xE1: "P", # PK part of PKMN
     0xE2: "M", # MN part of PKMN
     0xEE: "e", # accented e in POKEMON
