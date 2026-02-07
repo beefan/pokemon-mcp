@@ -31,4 +31,5 @@ Successfully navigate the intro sequence and arrive in your bedroom in Pallet To
 - **Navigation**: To exit a room, you must walk **ON TO** the exit tile (stairs or door).
 - **Stuck?**: If `walk_to` returns `blocked`, use `get_visual_observation` to see what is in your way (NPCs or walls).
 - **Vision Capability**: Your ability to describe image content relies on the visual rendering process (reading the file), not direct binary analysis. Always call `get_visual_observation` then read the file.
+- **Dialogue Loops**: If `advance_dialogue` says **STATE CHANGE: Dialogue has CLOSED**, you must **STOP** mashing and use `walk_to`. If you keep mashing while facing an object (like the SNES), you will trigger the SAME dialogue repeatedly.
 - **Limits**: `walk_to` is limited to 50 steps. If you aren't there yet, call it again.

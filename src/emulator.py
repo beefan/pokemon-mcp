@@ -54,21 +54,33 @@ class PokemonEmulator:
         
     def advance_dialogue(self):
         """Guaranteed mash of A and B for a set number of frames."""
+        # Optional: capture pre-mash text to detect loops
+        pre_text = self.get_dialogue_text()
+        
         # Mash for about 2-3 seconds total
         for _ in range(12):
             self.input(BUTTON_A, hold_frames=5)
-            self.tick(10)
+            self.tick(8)
             self.input(BUTTON_B, hold_frames=5)
-            self.tick(10)
+            self.tick(8)
             
-        # Get immediate feedback for the AI
-        new_text = self.get_dialogue_text()
+        # Check current state
+        active = self.is_dialogue_active()
+        post_text = self.get_dialogue_text()
         
-        # Safety check: if we see naming screen tiles, warn the AI
-        if "lower case" in new_text or "upper case" in new_text or "ED" in new_text:
-             return f"WARNING: You are on the NAMING SCREEN. Mashing B deletes characters. New Text:\n{new_text}"
+        # Scenario 1: Dialogue is closed
+        if not active:
+            return f"STATE CHANGE: Dialogue has CLOSED. You are now in the world/room map.\nAction: USE walk_to or get_visual_observation. DO NOT call advance_dialogue again until you interact with something new."
+
+        # Scenario 2: Naming Screen
+        if "lower case" in post_text or "upper case" in post_text or "ED" in post_text:
+             return f"WARNING: You are on the NAMING SCREEN. Mashing B deletes characters.\nAction: Use press_buttons('start, wait, a') to finish naming."
+
+        # Scenario 3: Loop Detection
+        if pre_text.strip() == post_text.strip() and len(post_text.strip()) > 0:
+            return f"LOOP DETECTED: The text '{post_text.strip()}' has not changed.\nAction: You are likely interacting with an object (like the SNES) repeatedly. Stop calling advance_dialogue and use walk_to to move away."
              
-        return f"Mashed A/B. New Dialogue Content:\n{new_text}"
+        return f"Dialogue Progressing. New Content:\n{post_text}\nAction: If the text is finished, stop. If not, call again."
 
     def get_dialogue_text(self):
         """Reads the text currently in the dialogue box area (rows 12-16)."""
