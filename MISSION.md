@@ -32,13 +32,14 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
     - Use `get_local_map` to scan the tables. 
     - Identify the coordinates of the Pokéballs (look for specific tile characters or use `describe_tile`).
 3. **Execution Phase**:
-    - Use `walk_to(x, y)` to reach the table with your desired Pokémon.
-    - Interact with the ball and confirm with `press_button('a')`.
+    - Use `interact_with(x, y)` on the Pokéball's map coordinates.
+    - **Note**: This tool will automatically walk you to the nearest side of the table and interact. No need to `walk_to` separately.
 
 ## Commanding Officer Protocol
 - **Observe Before Acting**: If you enter a new room or a long scene ends, ALWAYS call `get_player_status` or `get_local_map`. 
 - **Tool Priority**: 
     - Use `advance_dialogue()` for all text. 
+    - Use `interact_with(x, y)` for any object you cannot step on (Pokéballs, PCs, Signs).
     - Use `walk_to` for distance. 
     - Use `move_direction` ONLY for precise 1-tile steps.
 - **Self-Sufficiency**: Do not guess coordinates. The `get_local_map` tool provides a labeled grid—use it to find your targets.

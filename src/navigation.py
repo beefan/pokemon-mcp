@@ -290,3 +290,52 @@ class Navigation:
             self.emulator.tick(1)
             
         return "max_steps_reached"
+    def interact_with(self, target_x, target_y):
+        """
+        Interacts with an object at (target_x, target_y).
+        Logic: Find adjacent tile -> walk_to it -> Face target -> Press A.
+        Returns: "interaction_success", "walk_failed", or "no_accessible_path"
+        """
+        current_x, current_y = self.emulator.get_player_position()
+        
+        # 1. Find all adjacent tiles
+        adjacents = [
+            (target_x, target_y - 1, "down"), # Face down to target
+            (target_x, target_y + 1, "up"),   # Face up to target
+            (target_x, target_y - 1, "down"), # Duplicate fix:
+            (target_x - 1, target_y, "right"),# Face right to target
+            (target_x + 1, target_y, "left")  # Face left to target
+        ]
+        # De-duplicate and actually fix logic:
+        adjacents = [
+            (target_x, target_y - 1, "down"),
+            (target_x, target_y + 1, "up"),
+            (target_x - 1, target_y, "right"),
+            (target_x + 1, target_y, "left")
+        ]
+
+        # 2. Sort by distance from player
+        adjacents.sort(key=lambda p: abs(p[0]-current_x) + abs(p[1]-current_y))
+
+        # 3. Try walking to each
+        for ax, ay, face_dir in adjacents:
+            # Check if tile itself is walkable (simplified)
+            # Find path to see if accessible
+            path = self.find_path((current_x, current_y), (ax, ay))
+            if path is not None:
+                res = self.walk_to(ax, ay)
+                if res == "arrived":
+                    # 4. Face target and press A
+                    btn_map = {
+                        "up": BUTTON_UP,
+                        "down": BUTTON_DOWN,
+                        "left": BUTTON_LEFT,
+                        "right": BUTTON_RIGHT
+                    }
+                    self.emulator.input(btn_map[face_dir], hold_frames=2)
+                    self.emulator.tick(2)
+                    self.emulator.input(BUTTON_A, hold_frames=5)
+                    self.emulator.tick(5)
+                    return "interaction_success"
+        
+        return "no_accessible_path: could not reach a tile adjacent to the target."

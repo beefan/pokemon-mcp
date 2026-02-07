@@ -64,6 +64,15 @@ async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions:
     return run_on_main("walk_to", x, y, on_battle, avoid_positions)
 
 @mcp.tool()
+async def interact_with(x: int, y: int) -> str:
+    """
+    Interacts with an object at map coordinates (x, y).
+    REQUIRED: Use this for Pokéballs on tables, PCs, signs, or talking to stationary people.
+    Logic: This tool will automatically walk you to the nearest side of the object and press 'A'.
+    """
+    return run_on_main("interact_with", x, y)
+
+@mcp.tool()
 async def get_player_status() -> str:
     """
     Returns the current Map ID, (X, Y) coordinates, and nearby points of interest.
@@ -199,6 +208,8 @@ def process_command(func_name, args, kwargs):
             return True, str(emulator.move_direction(*args, **kwargs))
         elif func_name == "walk_to":
             return True, navigation.walk_to(*args, **kwargs)
+        elif func_name == "interact_with":
+            return True, navigation.interact_with(*args, **kwargs)
         elif func_name == "execute_battle_turn":
             return True, battle.execute_action(*args, **kwargs)
         elif func_name == "get_party_info":
