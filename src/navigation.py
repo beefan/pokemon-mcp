@@ -274,17 +274,26 @@ class Navigation:
             # 5. Verify Move
             new_pos = self.emulator.get_player_position()
             if new_pos == current_pos:
-                # We didn't move. Blocked!
-                try:
-                    tiles = self.emulator.get_screen_tile_ids()
-                    # tx, ty relative to player (10, 9)
-                    tx, ty = 10 + dx, 9 + dy
-                    tid = tiles[tx][ty] & 0xFF
-                    char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
-                    return f"blocked: cannot step on {char} at {next_step}"
-                except:
-                    known_walls.add(next_step)
-                    continue
+                # We didn't move. Try a "Wiggle" to unstick!
+                self._wiggle()
+                
+                # Retry the move once
+                self.emulator.input(button, hold_frames=5)
+                self.emulator.tick(5)
+                new_pos = self.emulator.get_player_position()
+                
+                if new_pos == current_pos:
+                    # Still blocked after wiggle. Fail.
+                    try:
+                        tiles = self.emulator.get_screen_tile_ids()
+                        # tx, ty relative to player (10, 9)
+                        tx, ty = 10 + dx, 9 + dy
+                        tid = tiles[tx][ty] & 0xFF
+                        char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
+                        return f"blocked: cannot step on {char} at {next_step} even after wiggle."
+                    except:
+                        known_walls.add(next_step)
+                        continue
             
             # Periodic tick to keep emulator healthy
             self.emulator.tick(1)
@@ -339,3 +348,9 @@ class Navigation:
                     return "interaction_success"
         
         return "no_accessible_path: could not reach a tile adjacent to the target."
+
+    def _wiggle(self):
+        """Taps all 4 directions briefly to reset physics/collision state."""
+        for btn in [BUTTON_UP, BUTTON_RIGHT, BUTTON_DOWN, BUTTON_LEFT]:
+            self.emulator.input(btn, hold_frames=1)
+            self.emulator.tick(1)
