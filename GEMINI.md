@@ -15,7 +15,12 @@ Create an MCP server that acts as a Tactical Interface for Pokémon Blue. The AI
 🛠️ MCP Tool Definitions
 1. Constrained Navigation
 
-    get_local_map(): Returns a 20x18 text-based grid (ASCII) of the current screen tiles (e.g., W for wall, D for door, P for player).
+    get_local_map(): Returns a JSON object containing:
+        - `map_id` (int): Current Map ID.
+        - `position` (tuple): (x, y) coordinates.
+        - `grid` (str): 20x18 text-based grid (ASCII) of the current screen tiles (e.g., W for wall, D for door, P for player).
+
+    get_party_info(): Returns a JSON summary of the current party (Species, HP, Level, Moves). Needed for strategic decisions.
 
     walk_to(x, y, on_battle: str): Moves the player to a coordinate within the current map.
 

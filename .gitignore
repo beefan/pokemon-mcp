@@ -1,0 +1,4 @@
+PokemonBlue.gb
+.venv/
+__pycache__/
+.env
