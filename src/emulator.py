@@ -93,13 +93,20 @@ class PokemonEmulator:
         
         # 1. Mash and Watch (Stubborn Persistence)
         mash_limit = 12
+        total_mashes = 0
+        safety_breakout = 100 # Maximum A presses allowed in one tool call
+        
         for _ in range(mash_limit):
             # Mash while dialogue is active
             while self.is_dialogue_active():
+                if total_mashes >= safety_breakout:
+                     return "STOP: ZOMBIE STATE DETECTED. Dialogue box is stuck after 100 mashes. Are you in a menu or a static screen? Try pressing B or moving away."
+                
                 self.input(BUTTON_A, hold_frames=5)
                 self.tick(8)
                 self.input(BUTTON_B, hold_frames=5)
                 self.tick(8)
+                total_mashes += 1
             
             # Dialogue box disappeared. STUBBORN PERSISTENCE: 
             # Wait and watch for 60 frames (1 second) to see if it returns.
@@ -116,14 +123,12 @@ class PokemonEmulator:
             # Otherwise, it returned, so the loop continues and we mash again.
             
         # 2. FINAL STABILIZE
-        self.tick(10)
+        self.tick(15)
             
         # Check current state (Multi-factor)
         active = self.is_dialogue_active()
         post_text = self.get_dialogue_text()
         full_text_after = self.get_full_screen_text()
-        intro_keywords = ["OAK", "NAME", "POKéMON", "WORLD", "ADVENTURE"]
-        has_intro_context = any(k in full_text_after for k in intro_keywords)
         
         # Re-check naming screen
         if any(k in full_text_after for k in ["YOUR NAME", "RIVAL'S NAME", "A B C D E", "ED"]):
@@ -178,7 +183,7 @@ class PokemonEmulator:
     def move_direction(self, direction):
         """
         Attempts to move one tile in the specified direction.
-        Returns: "success" if moved, or "blocked" if position remained the same.
+        Returns: "success" if moved (or map changed), or "blocked" if position remained the same.
         """
         btn_map = {
             "up": BUTTON_UP,
@@ -194,17 +199,24 @@ class PokemonEmulator:
             return "blocked: dialogue or menu is active"
 
         start_x, start_y = self.get_player_position()
+        start_map = self.get_map_id()
+        
         self.input(button, hold_frames=5)
-        self.tick(10)
+        # Increased wait for slow transitions/warps
+        self.tick(15)
+        
         end_x, end_y = self.get_player_position()
+        end_map = self.get_map_id()
+
+        # If map changed, it was a successful warp!
+        if start_map != end_map:
+            return f"success (transitioned to Map {end_map})"
 
         if (start_x, start_y) == (end_x, end_y):
             # Try to identify what is blocking from the screen
             try:
                 tiles = self.get_screen_tile_ids()
-                # Determine which tile we tried to step on relative to player
-                # Player is always in center of screen (10, 9) in PyBoy window
-                tx, ty = 10, 9
+                tx, ty = 10, 9 # Player center
                 if direction == "up": ty -= 1
                 elif direction == "down": ty += 1
                 elif direction == "left": tx -= 1
@@ -212,6 +224,10 @@ class PokemonEmulator:
                 
                 tid = tiles[tx][ty] & 0xFF
                 char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
+                
+                if tid == 0x7F:
+                    return "blocked by Invisible Wall / Exit Mat (Ensure you are walking the correct direction into the warp)"
+                
                 return f"blocked by {char}"
             except:
                 return "blocked"
@@ -254,10 +270,80 @@ class PokemonEmulator:
         img.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+    def get_background_tiles(self):
+        """
+        Returns a 20x18 matrix of tile IDs from the Background layer.
+        Accounts for Scroll X (SCX) and Scroll Y (SCY).
+        """
+        # SCX/SCY are hardware registers in the range 0xFF40-0xFF4B
+        scy = self.pyboy.memory[0xFF42]
+        scx = self.pyboy.memory[0xFF43]
+        
+        # Tile coordinates on the 32x32 BG map
+        start_tile_x = scx // 8
+        start_tile_y = scy // 8
+        
+        # Get the full 32x32 tilemap IDs
+        bg_map = self.pyboy.tilemap_background
+        
+        matrix = []
+        for x in range(20):
+            column = []
+            for y in range(18):
+                # Handle 32x32 wraparound
+                tx = (start_tile_x + x) % 32
+                ty = (start_tile_y + y) % 32
+                column.append(bg_map[tx, ty].tile_identifier)
+            matrix.append(column)
+        return matrix
+
+    def get_window_tiles(self):
+        """
+        Returns a 20x18 matrix of tile IDs from the Window layer (HUD/Menus).
+        """
+        # The Window layer is also 32x32, usually shown starting at (0,0) 
+        # when active (WY/WX registers control visibility).
+        win_map = self.pyboy.tilemap_window
+        
+        matrix = []
+        for x in range(20):
+            column = []
+            for y in range(18):
+                column.append(win_map[x, y].tile_identifier)
+            matrix.append(column)
+        return matrix
+
     def get_screen_tile_ids(self):
         """
-        Returns a 20x18 matrix of tile IDs currently visible on screen.
+        Returns a 20x18 composite tile ID matrix (Window over Background).
         """
-        # pyboy.tilemap_window returns the tile memory indices for the current screen window.
-        return self.pyboy.tilemap_window
+        bg = self.get_background_tiles()
+        win = self.get_window_tiles()
+        
+        # Composite: If win tile is 0x7F (empty), use BG. 
+        # Note: In Gen 1, 0x7F is the standard "blank" tile.
+        composite = []
+        for x in range(20):
+            column = []
+            for y in range(18):
+                wtid = win[x][y] & 0xFF
+                if wtid == 0x7F: # Space/Transparent
+                    column.append(bg[x][y])
+                else:
+                    column.append(win[x][y])
+            composite.append(column)
+        return composite
+
+    def describe_tile(self, screen_x, screen_y):
+        """
+        Returns a semantic description of the tile at screen coordinates (0-19, 0-17).
+        """
+        try:
+            tiles = self.get_screen_tile_ids()
+            tid = tiles[screen_x][screen_y] & 0xFF
+            char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
+            name = TILE_NAMES.get(char, "Unknown")
+            return f"Tile at ({screen_x}, {screen_y}) is '{char}' ({name})"
+        except Exception as e:
+            return f"Error describing tile: {e}"
 

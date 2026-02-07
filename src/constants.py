@@ -56,3 +56,16 @@ for i in range(26):
 for i in range(10):
     TILE_MAP[0xF6 + i] = chr(48 + i)
 
+# Semantic Tile Names (for describe_tile)
+TILE_NAMES = {
+    " ": "Floor / Open Space",
+    ".": "Grass / Ground",
+    "#": "Wall / Solid Object",
+    "S": "Stairs (Warp)",
+    ">": "Door / Exit (Warp)",
+    "P": "Pokemon Symbol",
+    "M": "Pokemon Symbol",
+}
+
+GRID_LEGEND = "#:Wall, .:Grass, S:Stairs, >:Door, P/M:PKMN"
+

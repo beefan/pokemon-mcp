@@ -10,34 +10,25 @@ class Navigation:
     def get_local_map(self):
         """
         Returns a dictionary containing map_id, position, and the grid.
+        Includes a legend and nearby warps for easy navigation.
         """
         map_id = self.emulator.get_map_id()
         x, y = self.emulator.get_player_position()
         
-        # Placeholder grid logic
-        # Ideally, we read the map data from memory or VRAM.
-        # Given limitations, we might need a known map layout or heuristic.
-        # For this phase, let's just return a basic grid around the player.
-        
         grid = self._scanner_local_grid(x, y)
+        warps = self._find_on_screen_warps()
         
         return {
             "map_id": map_id,
             "position": (x, y),
-            "grid": grid
+            "grid": f"{grid}\n\nLegend: {GRID_LEGEND}",
+            "nearby_warps": warps
         }
 
     def _scanner_local_grid(self, px, py):
         """
         Scans the local area around the player using PyBoy's tilemap helper.
         """
-        # PyBoy's tilemap_window gives us the 20x18 grid of tile IDs currently on screen.
-        # We need to expose this from the emulator wrapper first.
-        # For now, let's assume we add get_screen_tiles() to emulator.py
-        
-        # If we can't access it easily, we can stick to coordinates. 
-        # But the requirement is a grid string.
-        
         try:
             # Get the raw tile IDs from the emulator VRAM
             tile_ids = self.emulator.get_screen_tile_ids() # 20x18 matrix
@@ -48,12 +39,67 @@ class Navigation:
                 for x in range(20):
                      tid = tile_ids[x][y] & 0xFF
                      # Map ID to Char if known
-                     char = TILE_MAP.get(tid, " ") # Default to space instead of None
+                     char = TILE_MAP.get(tid, None)
+                     if char is None:
+                         # Default to hex ID for unknown tiles so agent can still "see" them
+                         char = f"{tid:02X}" if tid != 0 else ".."
                      row_chars.append(char)
-                grid_str.append("".join(row_chars)) # No strip!
+                grid_str.append(" ".join(row_chars)) # Join with space for readability
             return "\n".join(grid_str)
         except Exception as e:
             return f"Error reading grid: {e}\n(Player at {px}, {py})"
+
+    def _find_on_screen_warps(self):
+        """
+        Scans VRAM for stairs (S) and doors (>). 
+        Returns a list of warp objects with coordinates and suggested entry directions.
+        """
+        warps = []
+        try:
+            tiles = self.emulator.get_screen_tile_ids()
+            # Player is at (10, 9)
+            px, py = self.emulator.get_player_position()
+            
+            for tx in range(20):
+                for ty in range(18):
+                    tid = tiles[tx][ty] & 0xFF
+                    char = TILE_MAP.get(tid)
+                    if char in ["S", ">"]:
+                        # Convert screen to global map coords
+                        # Screen center (10,9) is player pos (px, py)
+                        gx = px + (tx - 10)
+                        gy = py + (ty - 9)
+                        
+                        target_direction = "unknown"
+                        if char == ">": target_direction = "up" # Doors usually require walking up
+                        elif char == "S": 
+                            # Stairs logic depends on visual
+                            target_direction = "into it" 
+                            
+                        warps.append({
+                            "type": "Stairs" if char == "S" else "Door",
+                            "pos": (gx, gy),
+                            "required_direction": target_direction
+                        })
+        except:
+            pass
+        return warps
+
+    def describe_tile(self, x, y, coordinate_type="screen"):
+        """
+        Describes a tile. Defaults to screen coords (0-19, 0-17).
+        If coordinate_type="map", it calculates screen pos relative to player.
+        """
+        if coordinate_type == "map":
+            px, py = self.emulator.get_player_position()
+            sx = (x - px) + 10
+            sy = (y - py) + 9
+            if not (0 <= sx < 20 and 0 <= sy < 18):
+                return f"Error: Map coordinate ({x}, {y}) is not currently visible on screen."
+        else:
+            sx, sy = x, y
+            
+        return self.emulator.describe_tile(sx, sy)
 
     def find_path(self, start_pos, target_pos, known_walls=set(), max_nodes=500):
         """

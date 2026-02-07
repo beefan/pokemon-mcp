@@ -100,6 +100,14 @@ async def advance_dialogue() -> str:
     return run_on_main("advance_dialogue")
 
 @mcp.tool()
+async def describe_tile(x: int, y: int, coordinate_type: str = "screen") -> str:
+    """
+    Returns a semantic description of a tile (e.g., 'Wall', 'Door').
+    coordinate_type: 'screen' (default, 0-19, 0-17) or 'map' (absolute coords).
+    """
+    return run_on_main("describe_tile", x, y, coordinate_type)
+
+@mcp.tool()
 async def press_button(button: str) -> str:
     """Presses a raw button (a, b, start, select, up, down, left, right)."""
     return run_on_main("press_button", button)
@@ -193,6 +201,8 @@ def process_command(func_name, args, kwargs):
             return True, game_state.write_journal_entry(*args, **kwargs)
         elif func_name == "advance_dialogue":
             return True, emulator.advance_dialogue()
+        elif func_name == "describe_tile":
+            return True, navigation.describe_tile(*args, **kwargs)
         elif func_name == "get_dialogue_text":
             return True, emulator.get_dialogue_text()
         elif func_name == "get_full_screen_text":
