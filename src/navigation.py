@@ -10,25 +10,27 @@ class Navigation:
     def get_local_map(self):
         """
         Returns a dictionary containing map_id, position, and the grid.
-        Includes a legend and nearby warps for easy navigation.
+        Includes a legend, nearby warps, and identified objects.
         """
         map_id = self.emulator.get_map_id()
         x, y = self.emulator.get_player_position()
         
-        grid = self._scanner_local_grid(x, y)
+        grid_data = self._scanner_local_grid_data(x, y) # Returns (string, object_list)
+        grid_str, objects = grid_data
         warps = self._find_on_screen_warps()
         
         return {
             "map_id": map_id,
             "position": (x, y),
-            "grid": f"{grid}\n\nLegend: {GRID_LEGEND}",
-            "nearby_warps": warps
+            "grid": f"{grid_str}\n\nLegend: {GRID_LEGEND}",
+            "nearby_warps": warps,
+            "nearby_objects": objects
         }
 
-    def _scanner_local_grid(self, px, py):
+    def _scanner_local_grid_data(self, px, py):
         """
-        Scans the local area around the player using PyBoy's tilemap helper.
-        Adds absolute coordinate labels to rows and columns.
+        Scans the local area around the player.
+        Returns a tuple: (grid_string, object_list)
         """
         try:
             # Get the raw tile IDs from the emulator VRAM
@@ -41,6 +43,7 @@ class Navigation:
                 col_headers += f"{abs_x:2} "
             
             grid_str = [col_headers]
+            found_objects = []
             
             # 2. Rows with labels
             for y in range(18):
@@ -51,15 +54,26 @@ class Navigation:
                      tid = tile_ids[x][y] & 0xFF
                      # Map ID to Char if known
                      char = TILE_MAP.get(tid, None)
+                     
+                     # Global coords
+                     gx, gy = px + (x - 10), py + (y - 9)
+
                      if char is None:
                          # Default to hex ID for unknown tiles so agent can still "see" them
                          char = f"{tid:02X}" if tid != 0 else ".."
+                     
+                     # Object Detection
+                     if char == "o":
+                         found_objects.append({"name": "Pokéball", "pos": (gx, gy)})
+                     elif char == "P" or char == "M":
+                         found_objects.append({"name": "Pokemon Symbol", "pos": (gx, gy)})
+
                      row_chars.append(f"{char:2}")
                 grid_str.append(row_label + " ".join(row_chars))
             
-            return "\n".join(grid_str)
+            return "\n".join(grid_str), found_objects
         except Exception as e:
-            return f"Error reading grid: {e}\n(Player at {px}, {py})"
+            return f"Error reading grid: {e}\n(Player at {px}, {py})", []
 
     def _find_on_screen_warps(self):
         """

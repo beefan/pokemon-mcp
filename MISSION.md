@@ -29,10 +29,10 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
 1. **Clear Initial Dialogue**: Use `advance_dialogue()` until Oak stops talking and stands near the Pokéball tables.
 2. **Observation Phase**: 
     - Verify you are in Map ID 40 (Oak's Lab).
-    - Use `get_local_map` to scan the tables. 
-    - Identify the coordinates of the Pokéballs (look for specific tile characters or use `describe_tile`).
+    - Use `get_local_map` to scan the area. 
+    - **CRITICAL**: Check the `nearby_objects` list in the JSON return. It will explicitly list the map coordinates of all Pokéballs ('o').
 3. **Execution Phase**:
-    - Use `interact_with(x, y)` on the Pokéball's map coordinates.
+    - Use `interact_with(x, y)` on the Pokéball's map coordinates found in the previous step.
     - **Note**: This tool will automatically walk you to the nearest side of the table and interact. No need to `walk_to` separately.
 
 ## Commanding Officer Protocol

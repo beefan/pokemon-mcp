@@ -55,6 +55,16 @@ TILE_MAP = {
     0x23: "W", # Water / Sea
     0x0B: "#", # Wall / Building
     0x08: "#", # Wall / Building
+    # Oak's Lab / Interiors
+    0x0F: ".", # Lab Floor
+    0x10: ".", # Lab Floor
+    0x11: "T", # Lab Table
+    0x3B: "T", # Lab Table
+    0x5B: "T", # Lab Table (Alt)
+    0x58: "#", # Lab Equipment / Wall
+    0x59: "#", # Lab Equipment / Wall
+    0x29: "o", # Pokéball on table
+    0x2A: "o", # Pokéball on table
 }
 
 # Fill A-Z (0x80 - 0x99)
@@ -76,7 +86,9 @@ TILE_NAMES = {
     ">": "Door / Exit (Warp)",
     "P": "Pokemon Symbol",
     "M": "Pokemon Symbol",
+    "T": "Table / Furniture",
+    "o": "Pokéball / Item",
 }
 
-GRID_LEGEND = "#:Wall, .:Grass, S:Stairs, >:Door, P/M:PKMN"
+GRID_LEGEND = "#:Wall, .:Floor, S:Stairs, >:Door, T:Table, o:Pokéball"
 
