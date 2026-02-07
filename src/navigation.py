@@ -28,13 +28,24 @@ class Navigation:
     def _scanner_local_grid(self, px, py):
         """
         Scans the local area around the player using PyBoy's tilemap helper.
+        Adds absolute coordinate labels to rows and columns.
         """
         try:
             # Get the raw tile IDs from the emulator VRAM
             tile_ids = self.emulator.get_screen_tile_ids() # 20x18 matrix
             
-            grid_str = []
+            # 1. Column Headers (X coordinates)
+            col_headers = "    " # Padding for row labels
+            for x in range(20):
+                abs_x = px + (x - 10)
+                col_headers += f"{abs_x:2} "
+            
+            grid_str = [col_headers]
+            
+            # 2. Rows with labels
             for y in range(18):
+                abs_y = py + (y - 9)
+                row_label = f"{abs_y:2} | "
                 row_chars = []
                 for x in range(20):
                      tid = tile_ids[x][y] & 0xFF
@@ -43,8 +54,9 @@ class Navigation:
                      if char is None:
                          # Default to hex ID for unknown tiles so agent can still "see" them
                          char = f"{tid:02X}" if tid != 0 else ".."
-                     row_chars.append(char)
-                grid_str.append(" ".join(row_chars)) # Join with space for readability
+                     row_chars.append(f"{char:2}")
+                grid_str.append(row_label + " ".join(row_chars))
+            
             return "\n".join(grid_str)
         except Exception as e:
             return f"Error reading grid: {e}\n(Player at {px}, {py})"
@@ -101,13 +113,18 @@ class Navigation:
             
         return self.emulator.describe_tile(sx, sy)
 
-    def find_path(self, start_pos, target_pos, known_walls=set(), max_nodes=500):
+    def find_path(self, start_pos, target_pos, known_walls=set(), avoid_positions=set(), max_nodes=500):
         """
         A* pathfinding with a node limit to prevent hangs.
+        Automatically treats warp tiles as walls UNLESS the target_pos is that warp.
         """
         if start_pos == target_pos:
             return []
             
+        # Scan current screen for warps to avoid
+        warps = self._find_on_screen_warps()
+        warp_positions = {w['pos'] for w in warps}
+        
         open_set = []
         heapq.heappush(open_set, (0, start_pos))
         came_from = {}
@@ -125,7 +142,15 @@ class Navigation:
             for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
                 neighbor = (current[0] + dx, current[1] + dy)
                 
+                # COLLISION CHECKS
                 if neighbor in known_walls:
+                    continue
+                if neighbor in avoid_positions:
+                    continue
+                
+                # AUTOMATIC WARP AVOIDANCE
+                # If neighbor is a warp and NOT our target, treat as a wall
+                if neighbor in warp_positions and neighbor != target_pos:
                     continue
                     
                 tentative_g_score = g_score[current] + 1
@@ -174,15 +199,17 @@ class Navigation:
         nearby_str = f" [Nearby: {', '.join(set(nearby))}]" if nearby else ""
         return f"Map ID: {map_id}, Position: ({x}, {y}){nearby_str}"
 
-    def walk_to(self, target_x, target_y, on_battle="interrupt", max_steps=100):
+    def walk_to(self, target_x, target_y, on_battle="interrupt", avoid_positions=None, max_steps=100):
         """
         Navigate to target coordinates.
+        avoid_positions: List of (x, y) tuples to steer clear of.
         Returns reason for stopping: "arrived", "battle", "blocked", "interrupted", "max_steps"
         """
         if self.emulator.is_dialogue_active():
              return "stopped: dialogue or menu is active. Clear the screen before walking."
 
         known_walls = set()
+        avoid_set = set(avoid_positions) if avoid_positions else set()
         steps_taken = 0
         
         while steps_taken < max_steps:
@@ -196,7 +223,7 @@ class Navigation:
                 
             # 2. Pathfind
             # Increased node limit for larger maps or complex paths
-            path = self.find_path(current_pos, target_pos, known_walls, max_nodes=1000)
+            path = self.find_path(current_pos, target_pos, known_walls, avoid_set, max_nodes=1000)
             if not path:
                 return f"blocked: no path found to ({target_x}, {target_y}) from your current position {current_pos}. Check if you are on an interactive tile (like stairs) and try moving away first."
                 

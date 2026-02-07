@@ -51,12 +51,13 @@ async def get_local_map() -> str:
     return run_on_main("get_local_map")
 
 @mcp.tool()
-async def walk_to(x: int, y: int, on_battle: str = "interrupt") -> str:
+async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
     """
     Moves the player to the target coordinate (x, y).
     on_battle: "interrupt" (default), "run", or "fight".
+    avoid_positions: Optional list of (x, y) coordinates to avoid during pathfinding.
     """
-    return run_on_main("walk_to", x, y, on_battle)
+    return run_on_main("walk_to", x, y, on_battle, avoid_positions)
 
 @mcp.tool()
 async def get_player_status() -> str:

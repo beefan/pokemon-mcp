@@ -44,6 +44,12 @@ TILE_MAP = {
     0xE7: "!",
     0xE8: ".",
     0xF3: "-",
+    # Pallet Town / World Tiles
+    0x2C: ".", # Grass/Floor (Pallet)
+    0x39: "F", # Fence / Solid
+    0x23: "W", # Water / Sea
+    0x0B: "#", # Wall / Building
+    0x08: "#", # Wall / Building
 }
 
 # Fill A-Z (0x80 - 0x99)

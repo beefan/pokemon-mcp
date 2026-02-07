@@ -293,7 +293,7 @@ class PokemonEmulator:
                 # Handle 32x32 wraparound
                 tx = (start_tile_x + x) % 32
                 ty = (start_tile_y + y) % 32
-                column.append(bg_map[tx, ty].tile_identifier)
+                column.append(bg_map[tx, ty])
             matrix.append(column)
         return matrix
 
@@ -309,7 +309,7 @@ class PokemonEmulator:
         for x in range(20):
             column = []
             for y in range(18):
-                column.append(win_map[x, y].tile_identifier)
+                column.append(win_map[x, y])
             matrix.append(column)
         return matrix
 
