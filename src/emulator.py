@@ -106,13 +106,13 @@ class PokemonEmulator:
         self.tick(frames)
         return f"Waited {duration_seconds} seconds."
 
-    def input(self, button, hold_frames=10):
+    def input(self, button, hold_frames=5):
         """Press and release a button."""
         self.pyboy.button_press(button)
         if not self.tick(hold_frames):
             return
         self.pyboy.button_release(button)
-        self.tick(10) # Wait a bit longer for GUI responsiveness
+        self.tick(5) # Faster gap
 
     def screen_image(self):
         """Return the current screen image (for visual debugging if needed)."""

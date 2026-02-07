@@ -30,11 +30,18 @@ class GameState:
                 "    - Use `get_visual_observation` and access `last_observation.png` to interpret the naming grid.\n"
                 "    - **To Skip Naming**: Use `press_buttons('start, wait, a')` to accept a default name.\n\n"
                 "5. **Goal: The Bedroom**:\n"
-                "    - You will eventually arrive in your room. Use `get_visual_observation` and `get_local_map` to verify you are in a bedroom (top-down view, Map ID 38).\n"
-                "    - Once you see you are in a bedroom, use `write_journal_entry(\"MISSION COMPLETE: Arrived in Bedroom.\")` to finish.\n\n"
+                "    - You will eventually arrive in your room (Map ID 38).\n"
+                "    - Use `get_visual_observation` to confirm you are in the bedroom.\n"
+                "    - **SAVE THE GAME**: Call `save_game(name='arrived_in_bedroom')` immediately.\n\n"
+                "6. **Phase 2: Leave the House**:\n"
+                "    - Walk to the stairs at **(7, 1)** to go down to 1F.\n"
+                "    - On 1F, walk south to the door at **(3, 7) or (2, 7)** to exit to Pallet Town.\n"
+                "    - Once outside (Map ID 0), walk south to the large building (Oak's Lab).\n\n"
                 "## Tactical Advice\n"
-                "- **Vision Capability**: Your ability to describe image content relies on the visual rendering process (reading the file), not direct binary analysis. Always call `get_visual_observation` then read the file.\n"
-                "- **Navigation**: Trust your eyes over everything else. If you see a bedroom, you are in a bedroom. Map ID 38 (0x26) is the technical verification for the starting room."
+                "- **Navigation**: To exit a room, you must walk **ON TO** the exit tile (stairs or door).\n"
+                "- **Stuck?**: If `walk_to` returns `blocked`, use `get_visual_observation` to see what is in your way (NPCs or walls).\n"
+                "- **Vision Capability**: Always render 'last_observation.png' after calling `get_visual_observation`.\n"
+                "- **Limits**: `walk_to` is limited to 50 steps. If you aren't there yet, call it again."
             )
             
             with open(self.journal_path, "w") as f:

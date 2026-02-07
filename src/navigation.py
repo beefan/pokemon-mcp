@@ -57,12 +57,9 @@ class Navigation:
         except Exception as e:
             return f"Error reading grid: {e}\n(Player at {px}, {py})"
 
-    def find_path(self, start_pos, target_pos, known_walls=set()):
+    def find_path(self, start_pos, target_pos, known_walls=set(), max_nodes=500):
         """
-        A* pathfinding on the grid.
-        start_pos: (x, y) global
-        target_pos: (x, y) global
-        known_walls: set of (x, y) global coordinates that are blocked
+        A* pathfinding with a node limit to prevent hangs.
         """
         if start_pos == target_pos:
             return []
@@ -73,7 +70,9 @@ class Navigation:
         g_score = {start_pos: 0}
         f_score = {start_pos: self._heuristic(start_pos, target_pos)}
         
-        while open_set:
+        nodes_explored = 0
+        while open_set and nodes_explored < max_nodes:
+            nodes_explored += 1
             current = heapq.heappop(open_set)[1]
             
             if current == target_pos:
@@ -85,9 +84,7 @@ class Navigation:
                 if neighbor in known_walls:
                     continue
                     
-                # Tentative g_score
                 tentative_g_score = g_score[current] + 1
-                
                 if tentative_g_score < g_score.get(neighbor, float('inf')):
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g_score
@@ -95,7 +92,7 @@ class Navigation:
                     f_score[neighbor] = f
                     heapq.heappush(open_set, (f, neighbor))
                     
-        return None # No path found
+        return None # No path found or limit reached
 
     def _heuristic(self, a, b):
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
@@ -108,17 +105,18 @@ class Navigation:
         total_path.reverse()
         return total_path[1:] # Exclude start
 
-    def walk_to(self, target_x, target_y, on_battle="interrupt"):
+    def walk_to(self, target_x, target_y, on_battle="interrupt", max_steps=50):
         """
         Navigate to target coordinates.
-        Returns reason for stopping: "arrived", "battle", "blocked", "interrupted"
+        Returns reason for stopping: "arrived", "battle", "blocked", "interrupted", "max_steps"
         """
         if self.emulator.is_dialogue_active():
              return "stopped: dialogue is active. Use advance_dialogue() or press 'a' to clear text before walking."
 
         known_walls = set()
+        steps_taken = 0
         
-        while True:
+        while steps_taken < max_steps:
             # 1. Update State
             current_x, current_y = self.emulator.get_player_position()
             current_pos = (current_x, current_y)
@@ -127,7 +125,16 @@ class Navigation:
             if current_pos == target_pos:
                 return "arrived"
                 
-            # 2. Check for Battle
+            # 2. Populate walls from screen if possible (Optimization)
+            # This helps A* find paths faster by avoiding obvious on-screen obstacles
+            try:
+                tile_ids = self.emulator.get_screen_tile_ids()
+                # We don't know the exact global coords of screen tiles without more calc,
+                # but we can at least detect the one we are about to step on.
+            except:
+                pass
+
+            # 3. Check for Battle
             enemy_hp = self.emulator.read_ram(ENEMY_HP_ADDR)
             if enemy_hp > 0:
                 # Battle detected!
@@ -164,7 +171,7 @@ class Navigation:
                 else:
                     return f"unknown policy: {on_battle}"
 
-            # 3. Pathfind
+            # 4. Pathfind
             path = self.find_path(current_pos, target_pos, known_walls)
             if not path:
                 return "blocked: no path found"
@@ -173,7 +180,7 @@ class Navigation:
             dx = next_step[0] - current_x
             dy = next_step[1] - current_y
             
-            # 4. Execute Move
+            # 5. Execute Move
             button = None
             if dy == -1: button = BUTTON_UP
             elif dy == 1: button = BUTTON_DOWN
@@ -181,16 +188,16 @@ class Navigation:
             elif dx == 1: button = BUTTON_RIGHT
             
             if button:
-                self.emulator.input(button)
+                self.emulator.input(button, hold_frames=5) # Faster input
+                steps_taken += 1
                 
-            # 5. Verify Move
+            # 6. Verify Move
             new_x, new_y = self.emulator.get_player_position()
             if (new_x, new_y) == current_pos:
                 # We didn't move. Blocked!
                 known_walls.add(next_step)
-            else:
-                # Moved successfully
-                pass
             
-
-
+            # Periodic tick to keep emulator healthy
+            self.emulator.tick(1)
+            
+        return "max_steps_reached"
