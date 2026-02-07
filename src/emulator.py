@@ -71,10 +71,11 @@ class PokemonEmulator:
             return False
 
     def is_dialogue_active(self):
-        """Check if a dialogue box is active via RAM OR visual border detection."""
+        """Check if a dialogue box or naming screen is active."""
         ram_active = self.read_ram(DIALOGUE_STATE_ADDR) != 0
+        naming_active = self.read_ram(NAMING_SCREEN_ADDR) != 0
         visual_active = self.is_dialogue_box_on_screen()
-        return ram_active or visual_active
+        return ram_active or visual_active or naming_active
         
     def advance_dialogue(self):
         """Guaranteed mash of A and B for a set number of frames with state verification."""
@@ -87,15 +88,21 @@ class PokemonEmulator:
 
         pre_text = self.get_dialogue_text()
         
-        # Mash for about 2-3 seconds total
-        for _ in range(12):
+        # Mash for about 2-3 seconds total, but exit early if dialogue ends
+        for i in range(12):
             self.input(BUTTON_A, hold_frames=5)
             self.tick(8)
             self.input(BUTTON_B, hold_frames=5)
             self.tick(8)
             
-        # 2. PATIENCE BUFFER: Wait an extra half second for scripts to finish
-        self.tick(30)
+            # Check if dialogue has closed after every iteration.
+            if not self.is_dialogue_active():
+                # One final small tick to let any closing animation finish
+                self.tick(5)
+                break
+            
+        # 2. PATIENCE BUFFER: Brief pause to stabilize
+        self.tick(10) 
             
         # Check current state (Multi-factor)
         active = self.is_dialogue_active()
