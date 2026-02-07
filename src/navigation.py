@@ -105,6 +105,15 @@ class Navigation:
         self._collision_cache = collision_map
         self._last_scan_origin = (px, py)
 
+    def _refresh_collision_cache(self):
+        """
+        Re-scan the current screen and refresh the cached collision data
+        so navigation helpers can rely on up-to-date walkability info.
+        """
+        px, py = self.emulator.get_player_position()
+        grid_data = self._scanner_local_grid_data(px, py)
+        self._cache_collision_map(px, py, grid_data["collision"])
+
     def _get_collision_tile(self, pos):
         return self._collision_cache.get(pos)
 
@@ -289,6 +298,7 @@ class Navigation:
         steps_taken = 0
         
         while steps_taken < max_steps:
+            self._refresh_collision_cache()
             # 1. Update State
             current_x, current_y = self.emulator.get_player_position()
             current_pos = (current_x, current_y)
@@ -390,6 +400,7 @@ class Navigation:
         Returns: "interaction_success", "walk_failed", or "no_accessible_path"
         """
         current_x, current_y = self.emulator.get_player_position()
+        self._refresh_collision_cache()
         
         # 1. Find all adjacent walkable tiles near the target
         adjacents = self._adjacent_walkable_positions(target_x, target_y)
