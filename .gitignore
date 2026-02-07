@@ -4,3 +4,5 @@ __pycache__/
 .env
 saves/
 .DS_Store
+game_journal.json
+last_observation.png
