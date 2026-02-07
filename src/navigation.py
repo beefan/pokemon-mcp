@@ -111,7 +111,7 @@ class Navigation:
         Returns reason for stopping: "arrived", "battle", "blocked", "interrupted", "max_steps"
         """
         if self.emulator.is_dialogue_active():
-             return "stopped: dialogue is active. Use advance_dialogue() or press 'a' to clear text before walking."
+             return "stopped: dialogue or menu is active. Clear the screen before walking."
 
         known_walls = set()
         steps_taken = 0

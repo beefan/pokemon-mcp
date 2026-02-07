@@ -47,14 +47,44 @@ class PokemonEmulator:
         """Read a range of RAM bytes."""
         return [self.read_ram(start_address + i) for i in range(length)]
 
+    def is_dialogue_box_on_screen(self):
+        """
+        Scans the screen for dialogue box border tiles.
+        Standard Gen 1 border tile is 0x79 (Top-Left), 0x7A (Top-Right).
+        The dialogue box top border is at row 12.
+        """
+        try:
+            tiles = self.get_screen_tile_ids()
+            # Check corners of the dialogue box top row
+            tl = tiles[0][12] & 0xFF
+            tr = tiles[19][12] & 0xFF
+            
+            # Common border tile IDs in Pokemon Blue
+            # 0xBA is often used for the top border in some versions/palettes
+            # 0x7x are standard for others.
+            is_border = (tl == tr) and (tl in [0x79, 0xBA, 0x6E])
+            
+            # Also check if the bottom area is "clean" text tiles (0x7F or 0x80+)
+            # instead of world sprites.
+            return is_border
+        except:
+            return False
+
     def is_dialogue_active(self):
-        """Check if a dialogue box is currently active (0xD11B)."""
-        # Some ROM versions or states might not update this perfectly.
-        return self.read_ram(0xD11B) != 0
+        """Check if a dialogue box is active via RAM OR visual border detection."""
+        ram_active = self.read_ram(DIALOGUE_STATE_ADDR) != 0
+        visual_active = self.is_dialogue_box_on_screen()
+        return ram_active or visual_active
         
     def advance_dialogue(self):
-        """Guaranteed mash of A and B for a set number of frames."""
-        # Optional: capture pre-mash text to detect loops
+        """Guaranteed mash of A and B for a set number of frames with state verification."""
+        # 1. Capture full screen text for robust detection
+        full_text = self.get_full_screen_text()
+        is_naming_screen = any(k in full_text for k in ["YOUR NAME", "RIVAL'S NAME", "A B C D E", "ED"])
+        
+        if is_naming_screen:
+            return f"CRITICAL STOP: You are on the NAMING SCREEN.\nAction: Use press_buttons('start, wait, a') to accept a default name."
+
         pre_text = self.get_dialogue_text()
         
         # Mash for about 2-3 seconds total
@@ -64,23 +94,29 @@ class PokemonEmulator:
             self.input(BUTTON_B, hold_frames=5)
             self.tick(8)
             
-        # Check current state
+        # 2. PATIENCE BUFFER: Wait an extra half second for scripts to finish
+        self.tick(30)
+            
+        # Check current state (Multi-factor)
         active = self.is_dialogue_active()
         post_text = self.get_dialogue_text()
+        full_text_after = self.get_full_screen_text()
+        intro_keywords = ["OAK", "NAME", "POKéMON", "WORLD", "ADVENTURE"]
+        has_intro_context = any(k in full_text_after for k in intro_keywords)
         
-        # Scenario 1: Dialogue is closed
+        # Re-check naming screen
+        if any(k in full_text_after for k in ["YOUR NAME", "RIVAL'S NAME", "A B C D E", "ED"]):
+             return f"STOP: You have reached the NAMING SCREEN.\nAction: Use press_buttons('start, wait, a') to finish naming."
+
+        # Scenario 1: Dialogue is truly closed
         if not active:
-            return f"STATE CHANGE: Dialogue has CLOSED. You are now in the world/room map.\nAction: USE walk_to or get_visual_observation. DO NOT call advance_dialogue again until you interact with something new."
+            return "STATE CHANGE: Dialogue has CLOSED."
 
-        # Scenario 2: Naming Screen
-        if "lower case" in post_text or "upper case" in post_text or "ED" in post_text:
-             return f"WARNING: You are on the NAMING SCREEN. Mashing B deletes characters.\nAction: Use press_buttons('start, wait, a') to finish naming."
-
-        # Scenario 3: Loop Detection
+        # Scenario 2: Loop Detection
         if pre_text.strip() == post_text.strip() and len(post_text.strip()) > 0:
-            return f"LOOP DETECTED: The text '{post_text.strip()}' has not changed.\nAction: You are likely interacting with an object (like the SNES) repeatedly. Stop calling advance_dialogue and use walk_to to move away."
+            return f"LOOP DETECTED: The text '{post_text.strip()}' has not changed.\nAction: Use walk_to to move away if this is the end of a sequence."
              
-        return f"Dialogue Progressing. New Content:\n{post_text}\nAction: If the text is finished, stop. If not, call again."
+        return f"Dialogue Progressing. Content:\n{post_text.strip()}"
 
     def get_dialogue_text(self):
         """Reads the text currently in the dialogue box area (rows 12-16)."""

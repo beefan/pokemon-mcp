@@ -106,14 +106,13 @@ async def get_full_screen_text() -> str:
 @mcp.tool()
 async def get_visual_observation() -> str:
     """
-    Captures a screenshot and saves it as 'last_observation.png'. 
-    If you subsequently access and render this file (e.g., through a read_file tool), 
-    you can use your vision capabilities to interpret and describe the visual content 
-    (menus, characters, Professor Oak, etc.).
+    Captures a screenshot of the game. 
+    Workflow: Call this tool, then use your `read_file` or equivalent tool on 'last_observation.png' 
+    to see and describe the game screen (menus, characters, etc.) yourself.
     """
     img = run_on_main("screen_image")
     img.save("last_observation.png")
-    return "Visual observation saved to 'last_observation.png'. Access this file to interpret the current game screen vision."
+    return "Visual observation saved to 'last_observation.png'. Use your file tools to read and interpret this image now."
 
 @mcp.tool()
 async def save_game(name: str = "default") -> str:
