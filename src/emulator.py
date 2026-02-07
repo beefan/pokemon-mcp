@@ -50,23 +50,22 @@ class PokemonEmulator:
     def is_dialogue_box_on_screen(self):
         """
         Scans the screen for dialogue box border tiles.
-        Standard Gen 1 border tile is 0x79 (Top-Left), 0x7A (Top-Right).
+        Standard Gen 1 border tiles:
+        0x79: Top-Left Corner
+        0x7A: Top-Right Corner
+        0x77: Horizontal Edge
         The dialogue box top border is at row 12.
         """
         try:
             tiles = self.get_screen_tile_ids()
-            # Check corners of the dialogue box top row
+            # Row 12 is where the dialogue box usually starts
             tl = tiles[0][12] & 0xFF
             tr = tiles[19][12] & 0xFF
+            edge = tiles[10][12] & 0xFF
             
-            # Common border tile IDs in Pokemon Blue
-            # 0xBA is often used for the top border in some versions/palettes
-            # 0x7x are standard for others.
-            is_border = (tl == tr) and (tl in [0x79, 0xBA, 0x6E])
-            
-            # Also check if the bottom area is "clean" text tiles (0x7F or 0x80+)
-            # instead of world sprites.
-            return is_border
+            # Check for corners or a sustained horizontal edge
+            is_box = (tl in [0x79, 0xBA, 0x6E] or tr in [0x7A, 0xBA, 0x6E]) or (edge == 0x77)
+            return is_box
         except:
             return False
 
@@ -79,6 +78,10 @@ class PokemonEmulator:
         
     def advance_dialogue(self):
         """Guaranteed mash of A and B for a set number of frames with state verification."""
+        # 0. STARTUP BUFFER: Give the emulator a few frames to render the box
+        # if the tool was called immediately after an interaction.
+        self.tick(10)
+
         # 1. Capture full screen text for robust detection
         full_text = self.get_full_screen_text()
         is_naming_screen = any(k in full_text for k in ["YOUR NAME", "RIVAL'S NAME", "A B C D E", "ED"])
@@ -88,21 +91,32 @@ class PokemonEmulator:
 
         pre_text = self.get_dialogue_text()
         
-        # Mash for about 2-3 seconds total, but exit early if dialogue ends
-        for i in range(12):
-            self.input(BUTTON_A, hold_frames=5)
-            self.tick(8)
-            self.input(BUTTON_B, hold_frames=5)
-            self.tick(8)
+        # 1. Mash and Watch (Stubborn Persistence)
+        mash_limit = 12
+        for _ in range(mash_limit):
+            # Mash while dialogue is active
+            while self.is_dialogue_active():
+                self.input(BUTTON_A, hold_frames=5)
+                self.tick(8)
+                self.input(BUTTON_B, hold_frames=5)
+                self.tick(8)
             
-            # Check if dialogue has closed after every iteration.
-            if not self.is_dialogue_active():
-                # One final small tick to let any closing animation finish
-                self.tick(5)
+            # Dialogue box disappeared. STUBBORN PERSISTENCE: 
+            # Wait and watch for 60 frames (1 second) to see if it returns.
+            dialogue_returned = False
+            for _ in range(30): # Check frequently over 1 second total
+                self.tick(2)
+                if self.is_dialogue_active():
+                    dialogue_returned = True
+                    break
+            
+            if not dialogue_returned:
+                # It stayed closed for the full window. We are done!
                 break
+            # Otherwise, it returned, so the loop continues and we mash again.
             
-        # 2. PATIENCE BUFFER: Brief pause to stabilize
-        self.tick(10) 
+        # 2. FINAL STABILIZE
+        self.tick(10)
             
         # Check current state (Multi-factor)
         active = self.is_dialogue_active()
