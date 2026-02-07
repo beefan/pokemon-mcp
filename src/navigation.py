@@ -288,23 +288,31 @@ class Navigation:
             # 5. Verify Move
             new_pos = self.emulator.get_player_position()
             if new_pos == current_pos:
-                # We didn't move. Try a "Wiggle" to unstick!
-                self._wiggle()
+                # We didn't move. Try "Lateral Recovery" to unstick!
+                # Identify perpendicular directions to the target move
+                perps = []
+                if button in [BUTTON_UP, BUTTON_DOWN]:
+                    perps = [BUTTON_LEFT, BUTTON_RIGHT]
+                else:
+                    perps = [BUTTON_UP, BUTTON_DOWN]
                 
-                # Retry the move once
-                self.emulator.input(button, hold_frames=5)
-                self.emulator.tick(5)
+                # Perform lateral tap
+                self._lateral_recovery(perps)
+                
+                # Retry the move with a DEEP press (longer hold)
+                self.emulator.input(button, hold_frames=20)
+                self.emulator.tick(20)
                 new_pos = self.emulator.get_player_position()
                 
                 if new_pos == current_pos:
-                    # Still blocked after wiggle. Fail.
+                    # Still blocked after recovery. Fail.
                     try:
                         tiles = self.emulator.get_screen_tile_ids()
                         # tx, ty relative to player (10, 9)
                         tx, ty = 10 + dx, 9 + dy
                         tid = tiles[tx][ty] & 0xFF
                         char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
-                        return f"blocked: cannot step on {char} at {next_step} even after wiggle."
+                        return f"blocked: cannot step on {char} at {next_step} even after lateral recovery."
                     except:
                         known_walls.add(next_step)
                         continue
@@ -363,8 +371,12 @@ class Navigation:
         
         return "no_accessible_path: could not reach a tile adjacent to the target."
 
-    def _wiggle(self):
-        """Taps all 4 directions briefly to reset physics/collision state."""
-        for btn in [BUTTON_UP, BUTTON_RIGHT, BUTTON_DOWN, BUTTON_LEFT]:
-            self.emulator.input(btn, hold_frames=1)
-            self.emulator.tick(1)
+    def _lateral_recovery(self, perpendicular_btns):
+        """
+        Attempts to 'un-wedge' the player by tapping directions perpendicular
+        to the blocked path.
+        """
+        for btn in perpendicular_btns:
+            # Very brief tap to shift sub-pixel/collision state
+            self.emulator.input(btn, hold_frames=2)
+            self.emulator.tick(2)

@@ -2,3 +2,5 @@ PokemonBlue.gb
 .venv/
 __pycache__/
 .env
+saves/
+.DS_Store
