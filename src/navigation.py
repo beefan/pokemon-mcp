@@ -12,7 +12,6 @@ class Navigation:
         Returns a dictionary containing map_id, position, and the grid.
         """
         map_id = self.emulator.get_map_id()
-        location_name = MAP_NAMES.get(map_id, "Unknown Area")
         x, y = self.emulator.get_player_position()
         
         # Placeholder grid logic
@@ -24,7 +23,6 @@ class Navigation:
         
         return {
             "map_id": map_id,
-            "location": location_name,
             "position": (x, y),
             "grid": grid
         }
@@ -48,7 +46,7 @@ class Navigation:
             for y in range(18):
                 row = ""
                 for x in range(20):
-                     tid = tile_ids[x][y] # Correct: Col x, Row y
+                     tid = tile_ids[x][y] & 0xFF # Mask to 8-bit tile ID
                      # Map ID to Char if known, else relative symbols
                      char = TILE_MAP.get(tid, None)
                      if char is None:

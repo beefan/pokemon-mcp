@@ -78,7 +78,7 @@ class PokemonEmulator:
         for y in range(13, 17):
             line = ""
             for x in range(1, 19): 
-                tid = tiles[x][y] # Correct: Col x, Row y
+                tid = tiles[x][y] & 0xFF
                 char = TILE_MAP.get(tid, " ")
                 line += char
             if line.strip():
@@ -92,7 +92,7 @@ class PokemonEmulator:
         for y in range(18):
             line = ""
             for x in range(20):
-                tid = tiles[x][y] # Correct: Col x, Row y
+                tid = tiles[x][y] & 0xFF
                 line += TILE_MAP.get(tid, " ")
             if line.strip():
                 rows.append(line.rstrip())

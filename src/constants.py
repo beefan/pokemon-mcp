@@ -6,17 +6,6 @@ ENEMY_HP_ADDR = 0xD057
 DIALOGUE_STATE_ADDR = 0xD11B
 PARTY_COUNT_ADDR = 0xD163
 
-MAP_NAMES = {
-    0: "Pallet Town",
-    1: "Red's House 1F",
-    2: "Red's House 2F (Bedroom)",
-    3: "Rival's House",
-    4: "Oak's Lab",
-    5: "Viridian City",
-    6: "Viridian City Gym",
-    # We can add more as needed
-}
-
 # Tile IDs (Approximate - need verification during runtime or from docs, using placeholders for now if specific IDs aren't known, 
 # but common ones for Gen 1 are often documented. For now, strict collision logic might rely on the map data tool inspection)
 # We will rely on get_local_map returning 'W', 'P', etc based on map scripts or raw tile ranges. 

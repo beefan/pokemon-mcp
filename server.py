@@ -104,12 +104,16 @@ async def get_full_screen_text() -> str:
     return run_on_main("get_full_screen_text")
 
 @mcp.tool()
-async def get_visual_observation() -> Image:
+async def get_visual_observation() -> str:
     """
-    Returns a visual screenshot of the current emulator screen.
-    Use this to 'see' the game, menus, Oak's face, or naming screens.
+    Captures a screenshot and saves it as 'last_observation.png'. 
+    If you subsequently access and render this file (e.g., through a read_file tool), 
+    you can use your vision capabilities to interpret and describe the visual content 
+    (menus, characters, Professor Oak, etc.).
     """
-    return run_on_main("screen_image")
+    img = run_on_main("screen_image")
+    img.save("last_observation.png")
+    return "Visual observation saved to 'last_observation.png'. Access this file to interpret the current game screen vision."
 
 @mcp.tool()
 async def save_game(name: str = "default") -> str:
