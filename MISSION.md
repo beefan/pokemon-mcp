@@ -25,10 +25,20 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
     - **NOTE**: House exits (Map 37 -> Map 0) use the `move_direction('down')` at `(3, 7)`. 
     - If `move_direction` returns "success", you have transitioned.
 
-## Tactical Advice
-- **AUTONOMY**: Use `get_player_status` or `get_local_map` to determine your position.
-- **Vision**: Use your file tools to read `last_observation.png`.
-- **Navigation**: 
-    - Use `walk_to` for distance.
-    - Use `move_direction` for precise steps onto warps (stairs/doors).
-    - If blocked by tile `0x7F`, it is likely an invisible wall or an exit mat that requires a specific direction.
+## Phase 3: Oak's Lab & Selecting a Partner
+1. **Clear Initial Dialogue**: Use `advance_dialogue()` until Oak stops talking and stands near the Pokéball tables.
+2. **Observation Phase**: 
+    - Verify you are in Map ID 40 (Oak's Lab).
+    - Use `get_local_map` to scan the tables. 
+    - Identify the coordinates of the Pokéballs (look for specific tile characters or use `describe_tile`).
+3. **Execution Phase**:
+    - Use `walk_to(x, y)` to reach the table with your desired Pokémon.
+    - Interact with the ball and confirm with `press_button('a')`.
+
+## Commanding Officer Protocol
+- **Observe Before Acting**: If you enter a new room or a long scene ends, ALWAYS call `get_player_status` or `get_local_map`. 
+- **Tool Priority**: 
+    - Use `advance_dialogue()` for all text. 
+    - Use `walk_to` for distance. 
+    - Use `move_direction` ONLY for precise 1-tile steps.
+- **Self-Sufficiency**: Do not guess coordinates. The `get_local_map` tool provides a labeled grid—use it to find your targets.

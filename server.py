@@ -47,13 +47,17 @@ def get_emulator_info():
 # Updated Tools to use Queue
 @mcp.tool()
 async def get_local_map() -> str:
-    """Returns the current map ID, position, and visual grid."""
+    """
+    Returns the current map ID, position, and a visual ASCII grid with coordinate labels.
+    REQUIRED: Use this to scan for interactable items (like Pokéballs on tables) and determine coordinates for walk_to.
+    """
     return run_on_main("get_local_map")
 
 @mcp.tool()
 async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
     """
-    Moves the player to the target coordinate (x, y).
+    Strategic Movement: Moves the player to the target coordinate (x, y) using A* pathfinding.
+    REQUIRED: Use this as your primary tool for all world navigation.
     on_battle: "interrupt" (default), "run", or "fight".
     avoid_positions: Optional list of (x, y) coordinates to avoid during pathfinding.
     """
@@ -70,7 +74,8 @@ async def get_player_status() -> str:
 @mcp.tool()
 async def move_direction(direction: str, steps: int = 1) -> str:
     """
-    Moves the player in a direction for a number of steps.
+    Tactical Adjustment: Moves the player in a direction for a number of steps.
+    Use this for single-step adjustments or 'mashing' in a direction until blocked.
     If steps is None, moves until blocked, a battle starts, or a map transition occurs.
     """
     return run_on_main("move_direction", direction, steps)
@@ -97,7 +102,11 @@ async def write_journal_entry(note: str) -> str:
 
 @mcp.tool()
 async def advance_dialogue() -> str:
-    """Mashes the A button until the current dialogue box is closed."""
+    """
+    REQUIRED: Mashes buttons until the current dialogue box is closed.
+    Use this for ALL long conversations, cutscenes, or lectures (like Oak's Intro).
+    NEVER use manual press_buttons to progress dialogue as you may lose state context.
+    """
     return run_on_main("advance_dialogue")
 
 @mcp.tool()
