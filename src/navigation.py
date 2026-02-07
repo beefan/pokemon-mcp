@@ -10,9 +10,9 @@ class Navigation:
     def get_local_map(self):
         """
         Returns a dictionary containing map_id, position, and the grid.
-        Returns a dictionary containing map_id, position, and the grid.
         """
         map_id = self.emulator.get_map_id()
+        location_name = MAP_NAMES.get(map_id, "Unknown Area")
         x, y = self.emulator.get_player_position()
         
         # Placeholder grid logic
@@ -24,6 +24,7 @@ class Navigation:
         
         return {
             "map_id": map_id,
+            "location": location_name,
             "position": (x, y),
             "grid": grid
         }
@@ -47,14 +48,12 @@ class Navigation:
             for y in range(18):
                 row = ""
                 for x in range(20):
-                     # 0xFF is often empty or specific logic. 
-                     # We need to know which tiles are walkable.
-                     # For now, just print the hex ID or a symbol.
-                     tid = tile_ids[y][x]
-                     # Simple mapping:
-                     # This requires knowing the tileset. 
-                     # Let's just output the ID in hex for now, or '.'
-                     row += f"{tid:02X} " 
+                     tid = tile_ids[x][y] # Correct: Col x, Row y
+                     # Map ID to Char if known, else relative symbols
+                     char = TILE_MAP.get(tid, None)
+                     if char is None:
+                         char = f"{tid:02X}" if tid != 0 else "."
+                     row += char + " "
                 grid_str.append(row.strip())
             return "\n".join(grid_str)
         except Exception as e:
@@ -116,6 +115,9 @@ class Navigation:
         Navigate to target coordinates.
         Returns reason for stopping: "arrived", "battle", "blocked", "interrupted"
         """
+        if self.emulator.is_dialogue_active():
+             return "stopped: dialogue is active. Use advance_dialogue() or press 'a' to clear text before walking."
+
         known_walls = set()
         
         while True:

@@ -13,8 +13,33 @@ class GameState:
 
     def _ensure_journal(self):
         if not os.path.exists(self.journal_path):
+            initial_mission = (
+                "# MISSION: The Pallet Town Arrival\n\n"
+                "## Primary Objective\n"
+                "Successfully navigate the intro sequence and arrive in your bedroom in Pallet Town.\n\n"
+                "## Tactical Steps\n"
+                "1. **Initialize**: Call `get_visual_observation` (Base64 Image) or `get_full_screen_text` to identify the current screen.\n"
+                "2. **Start Game**: \n"
+                "    - If you see the Pokémon Title screen graphics, press `start` and `wait(1.0)`.\n"
+                "    - Use `get_full_screen_text` to verify 'NEW GAME' is visible, then press `a`.\n"
+                "3. **The Oak Introduction**:\n"
+                "    - Professor Oak will appear. Use `get_visual_observation` to see him and `get_dialogue_text` to read his speech.\n"
+                "    - Use `advance_dialogue()` to move through his explanations.\n\n"
+                "4. **CRITICAL: The Naming Screen**:\n"
+                "    - If `get_full_screen_text` or `get_dialogue_text` shows characters like 'A B C D E' or the words 'lower case', 'upper case', or 'ED', **DO NOT use advance_dialogue()**.\n"
+                "    - You are on the NAMING SCREEN. Mashing B will delete progress and mashing A will select random letters.\n"
+                "    - **To Skip Naming**: Use `press_buttons('start, wait, a')` to accept a default name or correctly navigate with D-pad and A.\n\n"
+                "5. **Goal: The Bedroom**:\n"
+                "    - You will eventually arrive in your room. Call `get_local_map` and look for **'location': \"Red's House 2F (Bedroom)\"**.\n"
+                "    - Use `write_journal_entry(\"MISSION COMPLETE: Arrived in Bedroom.\")` to finish.\n\n"
+                "## Tactical Advice\n"
+                "- **Dialogue vs Naming**: Dialogue has two lines of text at the bottom. Naming has a large grid of letters. \n"
+                "- **Stuck?**: Use `get_visual_observation` to confirm exactly what the screen looks like before deciding your next move.\n"
+                "- Always `wait(1.0)` after selecting 'NEW GAME' to let the screen fade."
+            )
+            
             with open(self.journal_path, "w") as f:
-                json.dump({"entries": []}, f, indent=2)
+                json.dump({"entries": [{"note": f"MISSION LOADED:\n{initial_mission}"}]}, f, indent=2)
 
     def read_journal(self):
         with open(self.journal_path, "r") as f:

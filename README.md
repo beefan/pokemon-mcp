@@ -50,11 +50,11 @@ HEADLESS=false ./.venv/bin/python server.py
 ```
 
 ### Connecting an LLM
-This server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). You can connect any MCP-compliant client.
+This project uses **stdio** mode by default, meaning the MCP client (like Claude Desktop) runs the python script itself. You do **not** need to run a separate server process in a terminal window for the client to connect to.
 
 #### Claude Desktop App
 1. Open `~/Library/Application Support/Claude/claude_desktop_config.json`.
-2. Add the server configuration:
+2. Add the server configuration (this tells Claude how to launch the server):
 ```json
 {
   "mcpServers": {
