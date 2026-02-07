@@ -24,13 +24,16 @@ class Navigation:
         self._cache_collision_map(x, y, collision_map)
         warps = self._find_on_screen_warps()
         
+        serializable_collision = {
+            f"{pos[0]},{pos[1]}": data for pos, data in collision_map.items()
+        }
         return {
             "map_id": map_id,
             "position": (x, y),
             "grid": f"{grid_str}\n\nLegend: {GRID_LEGEND}",
             "nearby_warps": warps,
             "nearby_objects": objects,
-            "collision_map": collision_map
+            "collision_map": serializable_collision
         }
 
     def _scanner_local_grid_data(self, px, py):
