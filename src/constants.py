@@ -92,3 +92,5 @@ TILE_NAMES = {
 
 GRID_LEGEND = "#:Wall, .:Floor, S:Stairs, >:Door, T:Table, o:Pokéball"
 
+WALKABLE_CHARS = {".", " ", "S", ">"}
+WALKABLE_CHARS = {".", " "}

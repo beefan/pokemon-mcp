@@ -6,6 +6,8 @@ class Navigation:
     def __init__(self, emulator: PokemonEmulator, battle_engine=None):
         self.emulator = emulator
         self.battle_engine = battle_engine
+        self._collision_cache = {}
+        self._last_scan_origin = None
 
     def get_local_map(self):
         """
@@ -15,8 +17,11 @@ class Navigation:
         map_id = self.emulator.get_map_id()
         x, y = self.emulator.get_player_position()
         
-        grid_data = self._scanner_local_grid_data(x, y) # Returns (string, object_list)
-        grid_str, objects = grid_data
+        grid_data = self._scanner_local_grid_data(x, y)
+        grid_str = grid_data["grid_str"]
+        objects = grid_data["objects"]
+        collision_map = grid_data["collision"]
+        self._cache_collision_map(x, y, collision_map)
         warps = self._find_on_screen_warps()
         
         return {
@@ -24,13 +29,14 @@ class Navigation:
             "position": (x, y),
             "grid": f"{grid_str}\n\nLegend: {GRID_LEGEND}",
             "nearby_warps": warps,
-            "nearby_objects": objects
+            "nearby_objects": objects,
+            "collision_map": collision_map
         }
 
     def _scanner_local_grid_data(self, px, py):
         """
         Scans the local area around the player.
-        Returns a tuple: (grid_string, object_list)
+        Returns a dict with grid string, nearby objects, and detailed collision metadata.
         """
         try:
             # Get the raw tile IDs from the emulator VRAM
@@ -42,8 +48,9 @@ class Navigation:
                 abs_x = px + (x - 10)
                 col_headers += f"{abs_x:2} "
             
-            grid_str = [col_headers]
+            grid_rows = [col_headers]
             found_objects = []
+            collision_map = {}
             
             # 2. Rows with labels
             for y in range(18):
@@ -51,29 +58,78 @@ class Navigation:
                 row_label = f"{abs_y:2} | "
                 row_chars = []
                 for x in range(20):
-                     tid = tile_ids[x][y] & 0xFF
-                     # Map ID to Char if known
-                     char = TILE_MAP.get(tid, None)
-                     
-                     # Global coords
-                     gx, gy = px + (x - 10), py + (y - 9)
+                    tid = tile_ids[x][y] & 0xFF
+                    # Map ID to Char if known
+                    char = TILE_MAP.get(tid, None)
+                    
+                    # Global coords
+                    gx, gy = px + (x - 10), py + (y - 9)
 
-                     if char is None:
-                         # Default to hex ID for unknown tiles so agent can still "see" them
-                         char = f"{tid:02X}" if tid != 0 else ".."
-                     
-                     # Object Detection
-                     if char == "o":
-                         found_objects.append({"name": "Pokéball", "pos": (gx, gy)})
-                     elif char == "P" or char == "M":
-                         found_objects.append({"name": "Pokemon Symbol", "pos": (gx, gy)})
+                    if char is None:
+                        # Default to hex ID for unknown tiles so agent can still "see" them
+                        char = f"{tid:02X}" if tid != 0 else ".."
+                    
+                    # Object Detection
+                    if char == "o":
+                        found_objects.append({"name": "Pokéball", "pos": (gx, gy)})
+                    elif char == "P" or char == "M":
+                        found_objects.append({"name": "Pokemon Symbol", "pos": (gx, gy)})
 
-                     row_chars.append(f"{char:2}")
-                grid_str.append(row_label + " ".join(row_chars))
+                    walkable = self._char_is_walkable(char)
+                    collision_map[(gx, gy)] = {
+                        "char": char,
+                        "tid": tid,
+                        "name": TILE_NAMES.get(char, "Unknown"),
+                        "walkable": walkable
+                    }
+
+                    row_chars.append(f"{char:2}")
+                grid_rows.append(row_label + " ".join(row_chars))
             
-            return "\n".join(grid_str), found_objects
+            return {
+                "grid_str": "\n".join(grid_rows),
+                "objects": found_objects,
+                "collision": collision_map
+            }
         except Exception as e:
-            return f"Error reading grid: {e}\n(Player at {px}, {py})", []
+            return {
+                "grid_str": f"Error reading grid: {e}\n(Player at {px}, {py})",
+                "objects": [],
+                "collision": {}
+            }
+
+    def _cache_collision_map(self, px, py, collision_map):
+        self._collision_cache = collision_map
+        self._last_scan_origin = (px, py)
+
+    def _get_collision_tile(self, pos):
+        return self._collision_cache.get(pos)
+
+    def _char_is_walkable(self, char):
+        if not char:
+            return True
+        if char in WALKABLE_CHARS:
+            return True
+        if char in {".."}:
+            return True
+        if isinstance(char, str) and char.startswith("ID:"):
+            return True
+        return False
+
+    def _is_tile_walkable(self, pos):
+        tile = self._get_collision_tile(pos)
+        if not tile:
+            return True
+        return tile.get("walkable", True)
+
+    def _adjacent_walkable_positions(self, target_x, target_y):
+        adjacents = [
+            (target_x, target_y - 1, "down"),
+            (target_x, target_y + 1, "up"),
+            (target_x - 1, target_y, "right"),
+            (target_x + 1, target_y, "left")
+        ]
+        return [t for t in adjacents if self._is_tile_walkable((t[0], t[1]))]
 
     def _find_on_screen_warps(self):
         """
@@ -161,12 +217,15 @@ class Navigation:
                     continue
                 if neighbor in avoid_positions:
                     continue
-                
+
                 # AUTOMATIC WARP AVOIDANCE
                 # If neighbor is a warp and NOT our target, treat as a wall
                 if neighbor in warp_positions and neighbor != target_pos:
                     continue
-                    
+
+                if not self._is_tile_walkable(neighbor) and neighbor != target_pos:
+                    continue
+
                 tentative_g_score = g_score[current] + 1
                 if tentative_g_score < g_score.get(neighbor, float('inf')):
                     came_from[neighbor] = current
@@ -329,21 +388,10 @@ class Navigation:
         """
         current_x, current_y = self.emulator.get_player_position()
         
-        # 1. Find all adjacent tiles
-        adjacents = [
-            (target_x, target_y - 1, "down"), # Face down to target
-            (target_x, target_y + 1, "up"),   # Face up to target
-            (target_x, target_y - 1, "down"), # Duplicate fix:
-            (target_x - 1, target_y, "right"),# Face right to target
-            (target_x + 1, target_y, "left")  # Face left to target
-        ]
-        # De-duplicate and actually fix logic:
-        adjacents = [
-            (target_x, target_y - 1, "down"),
-            (target_x, target_y + 1, "up"),
-            (target_x - 1, target_y, "right"),
-            (target_x + 1, target_y, "left")
-        ]
+        # 1. Find all adjacent walkable tiles near the target
+        adjacents = self._adjacent_walkable_positions(target_x, target_y)
+        if not adjacents:
+            return "no_accessible_path: no walkable tile next to target"
 
         # 2. Sort by distance from player
         adjacents.sort(key=lambda p: abs(p[0]-current_x) + abs(p[1]-current_y))
