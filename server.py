@@ -68,12 +68,12 @@ async def get_player_status() -> str:
     return run_on_main("get_player_status")
 
 @mcp.tool()
-async def move_direction(direction: str) -> str:
+async def move_direction(direction: str, steps: int = 1) -> str:
     """
-    Attempts to move one tile in the specified direction (up, down, left, right).
-    Returns 'success' or 'blocked by [Tile]'.
+    Moves the player in a direction for a number of steps.
+    If steps is None, moves until blocked, a battle starts, or a map transition occurs.
     """
-    return run_on_main("move_direction", direction)
+    return run_on_main("move_direction", direction, steps)
 
 @mcp.tool()
 async def execute_battle_turn(action: str) -> str:

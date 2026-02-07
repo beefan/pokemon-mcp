@@ -180,10 +180,11 @@ class PokemonEmulator:
         self.tick(frames)
         return f"Waited {duration_seconds} seconds."
 
-    def move_direction(self, direction):
+    def move_direction(self, direction, steps=1):
         """
-        Attempts to move one tile in the specified direction.
-        Returns: "success" if moved (or map changed), or "blocked" if position remained the same.
+        Moves in the specified direction for a number of steps.
+        If steps is None, moves until blocked or a battle starts.
+        Returns: "arrived", "blocked", "transitioned", or "battle".
         """
         btn_map = {
             "up": BUTTON_UP,
@@ -195,44 +196,58 @@ class PokemonEmulator:
         if not button:
             return f"Error: Invalid direction '{direction}'"
 
-        if self.is_dialogue_active():
-            return "blocked: dialogue or menu is active"
-
-        start_x, start_y = self.get_player_position()
-        start_map = self.get_map_id()
+        total_steps = 0
+        max_continuous = 100 # Safety limit for None steps
+        limit = steps if steps is not None else max_continuous
         
-        self.input(button, hold_frames=5)
-        # Increased wait for slow transitions/warps
-        self.tick(15)
-        
-        end_x, end_y = self.get_player_position()
-        end_map = self.get_map_id()
+        while total_steps < limit:
+            if self.is_dialogue_active():
+                return f"stopped: dialogue or menu is active after {total_steps} steps"
 
-        # If map changed, it was a successful warp!
-        if start_map != end_map:
-            return f"success (transitioned to Map {end_map})"
+            start_x, start_y = self.get_player_position()
+            start_map = self.get_map_id()
+            
+            self.input(button, hold_frames=5)
+            # Tick enough for one tile move or transition
+            self.tick(15)
+            
+            end_x, end_y = self.get_player_position()
+            end_map = self.get_map_id()
+            enemy_hp = self.read_ram(ENEMY_HP_ADDR)
 
-        if (start_x, start_y) == (end_x, end_y):
-            # Try to identify what is blocking from the screen
-            try:
-                tiles = self.get_screen_tile_ids()
-                tx, ty = 10, 9 # Player center
-                if direction == "up": ty -= 1
-                elif direction == "down": ty += 1
-                elif direction == "left": tx -= 1
-                elif direction == "right": tx += 1
+            # Check Termination Conditions
+            if enemy_hp > 0:
+                return f"battle started after {total_steps + 1} steps"
                 
-                tid = tiles[tx][ty] & 0xFF
-                char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
-                
-                if tid == 0x7F:
-                    return "blocked by Invisible Wall / Exit Mat (Ensure you are walking the correct direction into the warp)"
-                
-                return f"blocked by {char}"
-            except:
-                return "blocked"
-        
-        return "success"
+            if start_map != end_map:
+                return f"transitioned point reached (Map {end_map}) after {total_steps + 1} steps"
+
+            if (start_x, start_y) == (end_x, end_y):
+                # Blocked logic
+                if total_steps == 0:
+                     # Identify blocker on first fail
+                     try:
+                        tiles = self.get_screen_tile_ids()
+                        tx, ty = 10, 9 # Player center
+                        if direction == "up": ty -= 1
+                        elif direction == "down": ty += 1
+                        elif direction == "left": tx -= 1
+                        elif direction == "right": tx += 1
+                        
+                        tid = tiles[tx][ty] & 0xFF
+                        char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
+                        if tid == 0x7F:
+                            return "blocked by Invisible Wall / Exit Mat"
+                        return f"blocked by {char}"
+                     except:
+                        return "blocked"
+                return f"blocked after {total_steps} steps"
+            
+            total_steps += 1
+            # Brief pause between steps for stability
+            self.tick(5)
+            
+        return f"arrived (moved {total_steps} steps)"
 
     def input(self, button, hold_frames=5):
         """Press and release a button."""
