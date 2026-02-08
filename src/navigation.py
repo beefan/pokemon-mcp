@@ -474,6 +474,9 @@ class Navigation:
         Logic: Find adjacent tile -> walk_to it -> Face target -> Press A.
         Returns: "interaction_success", "walk_failed", or "no_accessible_path"
         """
+        if self.emulator.is_dialogue_active():
+            return "dialogue_active: dialogue or menu is active. Clear the screen before interacting."
+        
         current_x, current_y = self.emulator.get_player_position()
         self._refresh_collision_cache()
         
