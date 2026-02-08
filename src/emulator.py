@@ -97,6 +97,26 @@ class PokemonEmulator:
         # Only check visual if the hardware window is on
         visual_active = self.is_dialogue_box_on_screen()
         return ram_active or visual_active or naming_active
+
+    def is_menu_active(self):
+        """Returns True when a menu is open (RAM flag)."""
+        return self.read_ram(MENU_STATE_ADDR) != 0
+
+    def is_battle_active(self):
+        """Returns True when an enemy is present."""
+        return self.read_ram(ENEMY_HP_ADDR) > 0
+
+    def is_battle_menu_active(self):
+        """
+        Heuristic: detect battle menu text on the screen.
+        This avoids treating battle menus as dialogue.
+        """
+        # Avoid heavy scans if not in battle or no window
+        if not self.is_battle_active() or not self.is_window_active():
+            return False
+        full_text = self.get_full_screen_text()
+        # Common battle menu labels in Gen 1
+        return any(k in full_text for k in ["FIGHT", "PKMN", "ITEM", "RUN"])
         
     def advance_dialogue(self):
         """Guaranteed mash of A and B for a set number of frames with state verification."""
@@ -110,6 +130,12 @@ class PokemonEmulator:
         
         if is_naming_screen:
             return f"CRITICAL STOP: You are on the NAMING SCREEN.\nAction: Use press_buttons('start, wait, a') to accept a default name."
+
+        # Battle/menu guard: do not mash through combat menus
+        if self.is_battle_menu_active() or (self.is_battle_active() and self.is_menu_active()):
+            return "STOP: Battle/menu active. Use battle tools or manual menu input instead of advance_dialogue."
+        if self.is_menu_active() and not self.is_dialogue_active():
+            return "STOP: Menu active. Close the menu or navigate it manually."
 
         pre_text = self.get_dialogue_text()
         
@@ -392,4 +418,3 @@ class PokemonEmulator:
             return f"Tile at ({screen_x}, {screen_y}) is '{char}' ({name})"
         except Exception as e:
             return f"Error describing tile: {e}"
-
