@@ -75,8 +75,8 @@ class Navigation:
                     gx, gy = px + (x - 10), py + (y - 9)
 
                     if char is None:
-                        # Default to hex ID for unknown tiles so agent can still "see" them
-                        char = f"{tid:02X}" if tid != 0 else ".."
+                        # Default to an ID tag for unknown tiles so walkability logic can handle them.
+                        char = f"ID:0x{tid:02X}" if tid != 0 else ".."
                     
                     # Object Detection
                     if char == "o":
@@ -483,7 +483,16 @@ class Navigation:
         # 1. Find all adjacent walkable tiles near the target
         adjacents = self._adjacent_walkable_positions(target_x, target_y)
         if not adjacents:
-            return "no_accessible_path: no walkable tile next to target"
+            # Provide diagnostic detail to help tune collision rules.
+            neighbor_debug = []
+            for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                pos = (target_x + dx, target_y + dy)
+                tile = self._get_collision_tile(pos)
+                if tile:
+                    neighbor_debug.append(f"{pos}:{tile.get('char')} walkable={tile.get('walkable')}")
+                else:
+                    neighbor_debug.append(f"{pos}:unknown (not in cache)")
+            return "no_accessible_path: no walkable tile next to target; neighbors=" + ", ".join(neighbor_debug)
 
         current_pos = (current_x, current_y)
         player_direction = self._direction_to_target(current_pos, (target_x, target_y))
