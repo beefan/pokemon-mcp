@@ -92,6 +92,9 @@ class PokemonEmulator:
 
     def is_dialogue_active(self):
         """Check if a dialogue box or naming screen is active."""
+        # Battle menus use the Window layer but should not be treated as dialogue.
+        if self.is_battle_menu_active():
+            return False
         ram_active = self.read_ram(DIALOGUE_STATE_ADDR) != 0
         naming_active = self.read_ram(NAMING_SCREEN_ADDR) != 0
         # Only check visual if the hardware window is on
@@ -131,11 +134,9 @@ class PokemonEmulator:
         if is_naming_screen:
             return f"CRITICAL STOP: You are on the NAMING SCREEN.\nAction: Use press_buttons('start, wait, a') to accept a default name."
 
-        # Battle/menu guard: do not mash through combat menus
-        if self.is_battle_menu_active() or (self.is_battle_active() and self.is_menu_active()):
-            return "STOP: Battle/menu active. Use battle tools or manual menu input instead of advance_dialogue."
-        if self.is_menu_active() and not self.is_dialogue_active():
-            return "STOP: Menu active. Close the menu or navigate it manually."
+        # Menu guard: do not mash through menus (battle or otherwise).
+        if self.is_menu_active() or self.is_battle_menu_active():
+            return "STOP: Menu active (battle or system). Use battle tools or manual menu input instead of advance_dialogue."
 
         pre_text = self.get_dialogue_text()
         
