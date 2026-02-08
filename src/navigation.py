@@ -2,6 +2,12 @@ import heapq
 from src.emulator import PokemonEmulator
 from src.constants import *
 
+DIRECTION_TO_BUTTON = {
+    "up": BUTTON_UP,
+    "down": BUTTON_DOWN,
+    "left": BUTTON_LEFT,
+    "right": BUTTON_RIGHT
+}
 class Navigation:
     def __init__(self, emulator: PokemonEmulator, battle_engine=None):
         self.emulator = emulator
@@ -142,6 +148,39 @@ class Navigation:
             (target_x + 1, target_y, "left")
         ]
         return [t for t in adjacents if self._is_tile_walkable((t[0], t[1]))]
+
+    def _warp_at_position(self, pos):
+        for warp in self._find_on_screen_warps():
+            if warp["pos"] == pos:
+                return warp
+        return None
+
+    def _closest_warp_approach(self, warp_pos, current_pos):
+        approaches = self._adjacent_walkable_positions(*warp_pos)
+        if not approaches:
+            return None
+        approaches.sort(key=lambda p: abs(p[0] - current_pos[0]) + abs(p[1] - current_pos[1]))
+        return approaches[0]
+
+    def _attempt_warp_entry(self, direction, warp_pos):
+        """
+        Presses the direction needed to step into a warp and returns True if the player
+        either arrives on the warp tile or the map ID changes (meaning a transition happened).
+        """
+        button = DIRECTION_TO_BUTTON.get(direction)
+        if not button:
+            return False
+
+        prev_map = self.emulator.get_map_id()
+        prev_pos = self.emulator.get_player_position()
+
+        self.emulator.input(button, hold_frames=8)
+        self.emulator.tick(15)
+
+        post_map = self.emulator.get_map_id()
+        post_pos = self.emulator.get_player_position()
+
+        return post_map != prev_map or post_pos == warp_pos
 
     def _direction_to_target(self, src, target):
         dx = target[0] - src[0]
@@ -318,13 +357,28 @@ class Navigation:
             current_x, current_y = self.emulator.get_player_position()
             current_pos = (current_x, current_y)
             target_pos = (target_x, target_y)
-            
-            if current_pos == target_pos:
+            warp_info = self._warp_at_position(target_pos)
+            path_target = target_pos
+            warp_entry_direction = None
+            if warp_info:
+                approach = self._closest_warp_approach(warp_info["pos"], current_pos)
+                if not approach:
+                    return f"blocked: warp at {target_pos} has no accessible adjacent tile."
+                path_target = (approach[0], approach[1])
+                warp_entry_direction = approach[2]
+
+            if warp_entry_direction and current_pos == path_target:
+                if self._attempt_warp_entry(warp_entry_direction, target_pos):
+                    return f"warped: triggered warp at {target_pos}"
+                steps_taken += 1
+                continue
+
+            if not warp_entry_direction and current_pos == target_pos:
                 return "arrived"
                 
             # 2. Pathfind
             # Increased node limit for larger maps or complex paths
-            path = self.find_path(current_pos, target_pos, known_walls, avoid_set, max_nodes=1000)
+            path = self.find_path(current_pos, path_target, known_walls, avoid_set, max_nodes=1000)
             if not path:
                 return f"blocked: no path found to ({target_x}, {target_y}) from your current position {current_pos}. Check if you are on an interactive tile (like stairs) and try moving away first."
                 
