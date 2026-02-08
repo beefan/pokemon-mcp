@@ -79,12 +79,47 @@ class Navigation:
             "grid": grid,
         }
 
+    def get_tile_histogram(self, radius=6):
+        """
+        Returns counts of tile IDs around the player for quick classification.
+        """
+        px, py = self.emulator.get_player_position()
+        self._refresh_collision_cache()
+        counts = {}
+        for dy in range(-radius, radius + 1):
+            for dx in range(-radius, radius + 1):
+                gx, gy = px + dx, py + dy
+                tile = self._get_collision_tile((gx, gy))
+                if not tile:
+                    continue
+                tid = tile.get("tid")
+                key = (tid, tile.get("char"), tile.get("walkable"))
+                entry = counts.get(key)
+                if entry is None:
+                    counts[key] = {
+                        "tid": tid,
+                        "char": tile.get("char"),
+                        "walkable": tile.get("walkable"),
+                        "count": 1,
+                        "sample_pos": (gx, gy),
+                    }
+                else:
+                    entry["count"] += 1
+        results = sorted(counts.values(), key=lambda e: e["count"], reverse=True)
+        return {
+            "map_id": self.emulator.get_map_id(),
+            "position": (px, py),
+            "radius": radius,
+            "tiles": results,
+        }
+
     def _scanner_local_grid_data(self, px, py):
         """
         Scans the local area around the player.
         Returns a dict with grid string, nearby objects, and detailed collision metadata.
         """
         try:
+            map_id = self.emulator.get_map_id()
             # Get the raw tile IDs from the emulator VRAM
             tile_ids = self.emulator.get_screen_tile_ids() # 20x18 matrix
             
@@ -121,7 +156,14 @@ class Navigation:
                     elif char == "P" or char == "M":
                         found_objects.append({"name": "Pokemon Symbol", "pos": (gx, gy)})
 
-                    if tid in NON_WALKABLE_TILE_IDS:
+                    map_walkable = MAP_WALKABLE_TILE_IDS.get(map_id, set())
+                    map_non_walkable = MAP_NON_WALKABLE_TILE_IDS.get(map_id, set())
+
+                    if tid in map_non_walkable:
+                        walkable = False
+                    elif tid in map_walkable:
+                        walkable = True
+                    elif tid in NON_WALKABLE_TILE_IDS:
                         walkable = False
                     elif tid in WALKABLE_TILE_IDS:
                         walkable = True

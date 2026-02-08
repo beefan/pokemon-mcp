@@ -60,7 +60,7 @@ TILE_MAP = {
     # Oak's Lab / Interiors
     0x0F: ".", # Lab Floor
     0x10: ".", # Lab Floor
-    0x11: "T", # Lab Table
+    0x11: "T", # Lab Floor/Table (observed as walkable in Oak's Lab)
     0x3B: "T", # Lab Table
     0x5B: "T", # Lab Table (Alt)
     0x58: "#", # Lab Equipment / Wall
@@ -100,3 +100,10 @@ WALKABLE_CHARS = {".", " ", "S", ">"}
 # These should be extended based on observed tile IDs from debug output.
 WALKABLE_TILE_IDS = set()
 NON_WALKABLE_TILE_IDS = set()
+
+# Per-map walkability overrides. Useful when a tile ID is context-dependent.
+# Map ID 40 = Oak's Lab: observed 0x11 appears walkable where the player stands.
+MAP_WALKABLE_TILE_IDS = {
+    40: {0x11},
+}
+MAP_NON_WALKABLE_TILE_IDS = {}

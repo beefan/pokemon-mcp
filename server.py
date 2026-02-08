@@ -72,6 +72,13 @@ async def get_local_grid(radius: int = 2) -> str:
     """
     return run_on_main("get_local_grid", radius)
 
+@mcp.tool()
+async def get_tile_histogram(radius: int = 6) -> str:
+    """
+    Returns counts of tile IDs around the player for quick classification.
+    """
+    return run_on_main("get_tile_histogram", radius)
+
 # @mcp.tool()
 # async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
 #     """DEPRECATED: Use move_direction sequences based on vision."""
@@ -236,6 +243,8 @@ def process_command(func_name, args, kwargs):
             return True, json.dumps(navigation.get_local_map())
         elif func_name == "get_local_grid":
             return True, json.dumps(navigation.get_local_grid(*args, **kwargs))
+        elif func_name == "get_tile_histogram":
+            return True, json.dumps(navigation.get_tile_histogram(*args, **kwargs))
         elif func_name == "get_player_status":
             return True, str(navigation.get_player_status())
         elif func_name == "move_direction":
