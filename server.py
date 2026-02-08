@@ -11,6 +11,7 @@ mcp = FastMCP("Pokemon Blue Strategy Guide")
 from src.navigation import Navigation
 from src.battle import Battle
 from src.game_state import GameState
+from src.vision import VisionSystem
 
 from PIL.Image import Image
 import asyncio
@@ -25,6 +26,7 @@ emulator = None
 navigation = None
 battle = None
 game_state = None
+vision = None
 
 # Thread-safe Command Queue
 command_queue = queue.Queue()
@@ -41,27 +43,28 @@ def run_on_main(func_name, *args, **kwargs):
 
 def get_emulator_info():
     """Returns info about the global instances (safe to call from background)."""
-    global emulator, navigation, battle, game_state
-    return emulator, navigation, battle, game_state
+    global emulator, navigation, battle, game_state, vision
+    return emulator, navigation, battle, game_state, vision
 
 # Updated Tools to use Queue
 @mcp.tool()
-async def get_local_map() -> str:
+async def get_screen_analysis() -> str:
     """
-    Returns the current map ID, position, and a visual ASCII grid with coordinate labels.
-    REQUIRED: Use this to scan for interactable items (like Pokéballs on tables) and determine coordinates for walk_to.
+    CORE VISION TOOL: Captures the game screen and returns an analysis with a visual grid.
+    Returns: JSON with map_id, position, and 'image_path' to the annotated screenshot.
+    Use this to 'see' the world, obstacles, and decided where to move.
     """
-    return run_on_main("get_local_map")
+    return run_on_main("get_screen_analysis")
 
-@mcp.tool()
-async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
-    """
-    Strategic Movement: Moves the player to the target coordinate (x, y) using A* pathfinding.
-    REQUIRED: Use this as your primary tool for all world navigation.
-    on_battle: "interrupt" (default), "run", or "fight".
-    avoid_positions: Optional list of (x, y) coordinates to avoid during pathfinding.
-    """
-    return run_on_main("walk_to", x, y, on_battle, avoid_positions)
+# @mcp.tool()
+# async def get_local_map() -> str:
+#     """DEPRECATED: Use get_screen_analysis instead."""
+#     return run_on_main("get_local_map")
+
+# @mcp.tool()
+# async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
+#     """DEPRECATED: Use move_direction sequences based on vision."""
+#     return run_on_main("walk_to", x, y, on_battle, avoid_positions)
 
 @mcp.tool()
 async def interact_with(x: int, y: int) -> str:
@@ -83,9 +86,10 @@ async def get_player_status() -> str:
 @mcp.tool()
 async def move_direction(direction: str, steps: int = 1) -> str:
     """
-    Tactical Adjustment: Moves the player in a direction for a number of steps.
-    Use this for single-step adjustments or 'mashing' in a direction until blocked.
-    If steps is None, moves until blocked, a battle starts, or a map transition occurs.
+    PRIMARY MOVEMENT: Moves the player in a direction.
+    - Set `steps` to move a specific distance (e.g., 2 tiles).
+    - Set `steps=None` to move until blocked (useful for long corridors).
+    Returns: 'arrived', 'blocked', 'transitioned', or 'battle'.
     """
     return run_on_main("move_direction", direction, steps)
 
@@ -196,11 +200,27 @@ def init_emulator(rom_path):
     battle = Battle(emulator)
     navigation = Navigation(emulator, battle)
     game_state = GameState(emulator)
+    vision = VisionSystem()
 
 def process_command(func_name, args, kwargs):
     """Executes a command using the global instances (Called on Main Thread)."""
     try:
-        if func_name == "get_local_map":
+        if func_name == "get_screen_analysis":
+            # Capture and annotate
+            img = emulator.screen_image()
+            px, py = emulator.get_player_position()
+            annotated_img = vision.overlay_grid(img, (px, py))
+            
+            filename = "analysis.png"
+            annotated_img.save(filename)
+            
+            return True, json.dumps({
+                "map_id": emulator.get_map_id(),
+                "position": (px, py),
+                "image_path": f"{os.getcwd()}/{filename}",
+                "note": "Use the image to identify walls, doors, and NPCs. Grid coords are (x, y)."
+            })
+        elif func_name == "get_local_map":
             return True, json.dumps(navigation.get_local_map())
         elif func_name == "get_player_status":
             return True, str(navigation.get_player_status())
