@@ -56,10 +56,21 @@ async def get_screen_analysis() -> str:
     """
     return run_on_main("get_screen_analysis")
 
-# @mcp.tool()
-# async def get_local_map() -> str:
-#     """DEPRECATED: Use get_screen_analysis instead."""
-#     return run_on_main("get_local_map")
+@mcp.tool()
+async def get_local_map() -> str:
+    """
+    Returns a detailed local map scan including tile IDs, walkability, and nearby objects.
+    Useful for debugging collision and navigation issues.
+    """
+    return run_on_main("get_local_map")
+
+@mcp.tool()
+async def get_local_grid(radius: int = 2) -> str:
+    """
+    Returns a compact square grid around the player with tile metadata.
+    radius=2 yields a 5x5 grid centered on the player.
+    """
+    return run_on_main("get_local_grid", radius)
 
 # @mcp.tool()
 # async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
@@ -223,6 +234,8 @@ def process_command(func_name, args, kwargs):
             })
         elif func_name == "get_local_map":
             return True, json.dumps(navigation.get_local_map())
+        elif func_name == "get_local_grid":
+            return True, json.dumps(navigation.get_local_grid(*args, **kwargs))
         elif func_name == "get_player_status":
             return True, str(navigation.get_player_status())
         elif func_name == "move_direction":

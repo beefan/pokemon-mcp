@@ -95,3 +95,8 @@ TILE_NAMES = {
 GRID_LEGEND = "#:Wall, .:Floor, S:Stairs, >:Door, T:Table, o:Pokéball"
 
 WALKABLE_CHARS = {".", " ", "S", ">"}
+
+# Tile ID walkability overrides (used to correct misclassified tiles at runtime).
+# These should be extended based on observed tile IDs from debug output.
+WALKABLE_TILE_IDS = set()
+NON_WALKABLE_TILE_IDS = set()

@@ -42,6 +42,43 @@ class Navigation:
             "collision_map": serializable_collision
         }
 
+    def get_local_grid(self, radius=2):
+        """
+        Returns a compact square grid around the player with tile metadata.
+        radius=2 yields a 5x5 grid centered on the player.
+        """
+        px, py = self.emulator.get_player_position()
+        self._refresh_collision_cache()
+        size = radius * 2 + 1
+        grid = []
+        for dy in range(-radius, radius + 1):
+            row = []
+            for dx in range(-radius, radius + 1):
+                gx, gy = px + dx, py + dy
+                tile = self._get_collision_tile((gx, gy))
+                if tile:
+                    row.append({
+                        "pos": (gx, gy),
+                        "char": tile.get("char"),
+                        "tid": tile.get("tid"),
+                        "walkable": tile.get("walkable"),
+                    })
+                else:
+                    row.append({
+                        "pos": (gx, gy),
+                        "char": None,
+                        "tid": None,
+                        "walkable": None,
+                    })
+            grid.append(row)
+        return {
+            "map_id": self.emulator.get_map_id(),
+            "position": (px, py),
+            "radius": radius,
+            "size": size,
+            "grid": grid,
+        }
+
     def _scanner_local_grid_data(self, px, py):
         """
         Scans the local area around the player.
@@ -84,7 +121,12 @@ class Navigation:
                     elif char == "P" or char == "M":
                         found_objects.append({"name": "Pokemon Symbol", "pos": (gx, gy)})
 
-                    walkable = self._char_is_walkable(char)
+                    if tid in NON_WALKABLE_TILE_IDS:
+                        walkable = False
+                    elif tid in WALKABLE_TILE_IDS:
+                        walkable = True
+                    else:
+                        walkable = self._char_is_walkable(char)
                     collision_map[(gx, gy)] = {
                         "char": char,
                         "tid": tid,
@@ -489,7 +531,9 @@ class Navigation:
                 pos = (target_x + dx, target_y + dy)
                 tile = self._get_collision_tile(pos)
                 if tile:
-                    neighbor_debug.append(f"{pos}:{tile.get('char')} walkable={tile.get('walkable')}")
+                    neighbor_debug.append(
+                        f"{pos}:{tile.get('char')} tid=0x{tile.get('tid'):02X} walkable={tile.get('walkable')}"
+                    )
                 else:
                     neighbor_debug.append(f"{pos}:unknown (not in cache)")
             return "no_accessible_path: no walkable tile next to target; neighbors=" + ", ".join(neighbor_debug)
