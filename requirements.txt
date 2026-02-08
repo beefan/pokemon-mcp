@@ -1,3 +1,4 @@
 fastmcp
 pyboy
 numpy
+Pillow

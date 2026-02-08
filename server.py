@@ -189,7 +189,7 @@ async def press_buttons(sequence: str) -> str:
     return run_on_main("press_buttons", sequence)
 
 def init_emulator(rom_path):
-    global emulator, navigation, battle, game_state
+    global emulator, navigation, battle, game_state, vision
     if not os.path.exists(rom_path):
          raise FileNotFoundError(f"ROM file not found at {os.path.abspath(rom_path)}")
     
@@ -209,7 +209,8 @@ def process_command(func_name, args, kwargs):
             # Capture and annotate
             img = emulator.screen_image()
             px, py = emulator.get_player_position()
-            annotated_img = vision.overlay_grid(img, (px, py))
+            scx, scy = emulator.get_screen_scroll()
+            annotated_img = vision.overlay_grid(img, (px, py), (scx, scy))
             
             filename = "analysis.png"
             annotated_img.save(filename)

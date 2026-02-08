@@ -39,6 +39,10 @@ class PokemonEmulator:
         """Return the current Map ID."""
         return self.read_ram(MAP_ID_ADDR)
 
+    def get_screen_scroll(self):
+        """Returns the (SCX, SCY) hardware register values."""
+        return self.read_ram(SCX_ADDR), self.read_ram(SCY_ADDR)
+
     def get_party_count(self):
         """Return the number of Pokemon in the party."""
         return self.read_ram(PARTY_COUNT_ADDR)

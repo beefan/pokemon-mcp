@@ -10,6 +10,8 @@ MENU_STATE_ADDR = 0xD05C    # Non-zero when a menu is open
 
 # Hardware Registers
 LCDC_ADDR = 0xFF40    # LCD Control
+SCY_ADDR = 0xFF42     # Scroll Y
+SCX_ADDR = 0xFF43     # Scroll X
 WY_ADDR = 0xFF4A      # Window Y Position
 WX_ADDR = 0xFF4B      # Window X Position
 
