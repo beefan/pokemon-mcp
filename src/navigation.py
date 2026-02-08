@@ -143,6 +143,21 @@ class Navigation:
         ]
         return [t for t in adjacents if self._is_tile_walkable((t[0], t[1]))]
 
+    def _direction_to_target(self, src, target):
+        dx = target[0] - src[0]
+        dy = target[1] - src[1]
+        if abs(dx) + abs(dy) != 1:
+            return None
+        if dx == 1:
+            return "right"
+        if dx == -1:
+            return "left"
+        if dy == 1:
+            return "down"
+        if dy == -1:
+            return "up"
+        return None
+
     def _find_on_screen_warps(self):
         """
         Scans VRAM for stairs (S) and doors (>). 
@@ -406,6 +421,21 @@ class Navigation:
         adjacents = self._adjacent_walkable_positions(target_x, target_y)
         if not adjacents:
             return "no_accessible_path: no walkable tile next to target"
+
+        current_pos = (current_x, current_y)
+        player_direction = self._direction_to_target(current_pos, (target_x, target_y))
+        if player_direction:
+            btn_map = {
+                "up": BUTTON_UP,
+                "down": BUTTON_DOWN,
+                "left": BUTTON_LEFT,
+                "right": BUTTON_RIGHT
+            }
+            self.emulator.input(btn_map[player_direction], hold_frames=2)
+            self.emulator.tick(2)
+            self.emulator.input(BUTTON_A, hold_frames=5)
+            self.emulator.tick(5)
+            return "interaction_success"
 
         # 2. Sort by distance from player
         adjacents.sort(key=lambda p: abs(p[0]-current_x) + abs(p[1]-current_y))
