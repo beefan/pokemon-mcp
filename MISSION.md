@@ -1,5 +1,8 @@
 # MISSION: The Pallet Town Arrival
 
+> [!IMPORTANT]
+> **MCP Technical Status**: This server is currently in active development. If the provided tools are unsuitable or insufficient for your tactical objectives, you are encouraged to directly modify the codebase or suggest architectural changes. **Note**: If you modify the MCP server code (e.g., `server.py`, `src/*.py`), you MUST ask the user to restart the MCP server for the changes to take effect.
+
 ## Primary Objective
 Successfully arrive in your bedroom in Pallet Town and then exit the house.
 

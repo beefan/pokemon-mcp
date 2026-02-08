@@ -249,18 +249,24 @@ class Navigation:
             
         return self.emulator.describe_tile(sx, sy)
 
-    def find_path(self, start_pos, target_pos, known_walls=set(), avoid_positions=set(), max_nodes=500):
+    def find_path(self, start_pos, target_pos, known_walls=None, avoid_positions=None, max_nodes=500):
         """
         A* pathfinding with a node limit to prevent hangs.
         Automatically treats warp tiles as walls UNLESS the target_pos is that warp.
         """
         if start_pos == target_pos:
             return []
-            
+
+        # Defensive defaults for mutable params
+        if known_walls is None:
+            known_walls = set()
+        if avoid_positions is None:
+            avoid_positions = set()
+
         # Scan current screen for warps to avoid
         warps = self._find_on_screen_warps()
         warp_positions = {w['pos'] for w in warps}
-        
+
         open_set = []
         heapq.heappush(open_set, (0, start_pos))
         came_from = {}
