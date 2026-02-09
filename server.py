@@ -295,16 +295,6 @@ async def get_full_screen_text() -> str:
     """Read all text currently on the entire screen. Useful for menus and title screens."""
     return run_on_main("get_full_screen_text")
 
-@mcp.tool()
-async def get_visual_observation() -> str:
-    """
-    Captures a screenshot of the game. 
-    Workflow: Call this tool, then use your `read_file` or equivalent tool on 'last_observation.png' 
-    to see and describe the game screen (menus, characters, etc.) yourself.
-    """
-    img = run_on_main("screen_image")
-    img.save("last_observation.png")
-    return "Visual observation saved to 'last_observation.png'. Use your file tools to read and interpret this image now."
 
 @mcp.tool()
 async def save_game(name: str = "default") -> str:
@@ -427,8 +417,6 @@ def process_command(func_name, args, kwargs):
             return True, emulator.get_dialogue_text()
         elif func_name == "get_full_screen_text":
             return True, emulator.get_full_screen_text()
-        elif func_name == "get_visual_observation":
-            return True, emulator.screen_image()
         elif func_name == "screen_image":
             return True, emulator.screen_image()
         elif func_name == "save_state":

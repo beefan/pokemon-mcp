@@ -328,14 +328,6 @@ class PokemonEmulator:
             self.pyboy.load_state(f)
         return f"Game state loaded from {filepath}"
 
-    def get_screen_base64(self):
-        """Returns the current screen as a base64 encoded PNG string."""
-        from io import BytesIO
-        import base64
-        img = self.pyboy.screen.image
-        buffered = BytesIO()
-        img.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def get_background_tiles(self):
         """

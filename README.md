@@ -4,7 +4,7 @@ An **MCP (Model Context Protocol)** server that acts as a tactical interface for
 
 ## 🚀 Features
 - **Tactical Interface**: Abstracts low-level button presses into commands like `walk_to(x, y)`, `execute_battle_turn()`.
-- **Visual Intelligence**: Provides screenshots (`get_visual_observation`) and OCR text to let the agent "see" the game.
+- **Visual Intelligence**: Provides screenshots (`get_screen_analysis`) and OCR text to let the agent "see" the game.
 - **Auto-Navigation**: A* pathfinding with configurable policies for handling encounters and obstacles.
 - **Save/Load States**: Instant savestate management for retrying risky strategies.
 - **The Journal & Mission Control**: A persistent memory system that loads mission-critical instructions from `MISSION.md`.
@@ -37,7 +37,7 @@ For the MCP server to work correctly, specific files must be present in the **wo
 | :--- | :--- |
 | `get_local_map` | Returns Map ID, (X,Y) coords, and an ASCII tile grid. |
 | `walk_to(x, y)` | Moves the player to coordinates using A* pathfinding. |
-| `get_visual_observation` | Saves `last_observation.png`. Use this to see Professor Oak or menus. |
+| `get_screen_analysis` | Captures screen & overlays a grid with coordinates. Use this to see the world. |
 | `advance_dialogue` | Mashes A/B to clear text. Includes loop and naming screen detection. |
 | `press_buttons(seq)` | Macro for sequences like `'start, wait, a'`. |
 | `save_game / load_game` | Instantly capture or restore the emulator state. |
