@@ -136,6 +136,30 @@ async def get_local_grid_ascii(radius: int = 6, show_tid: bool = False, show_wal
     """
     return run_on_main("get_local_grid_ascii", radius, show_tid, show_walkable)
 
+@mcp.tool()
+async def get_known_warps(map_id: int = None) -> str:
+    """
+    Returns remembered warps (doors/stairs) for a map ID.
+    If map_id is None, uses the current map.
+    """
+    return run_on_main("get_known_warps", map_id)
+
+@mcp.tool()
+async def find_path_to(x: int, y: int, use_memory: bool = False, max_nodes: int = 1000) -> str:
+    """
+    Returns a planned path and direction list to a target map coordinate.
+    If use_memory is True, can path to targets not currently on screen
+    using remembered tiles.
+    """
+    return run_on_main("find_path_to", x, y, use_memory, max_nodes)
+
+@mcp.tool()
+async def find_path_to_nearest_warp(use_memory: bool = True, max_nodes: int = 2000) -> str:
+    """
+    Finds a path to the nearest remembered warp (door/stairs).
+    """
+    return run_on_main("find_path_to_nearest_warp", use_memory, max_nodes)
+
 # @mcp.tool()
 # async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
 #     """DEPRECATED: Use move_direction sequences based on vision."""
@@ -320,6 +344,12 @@ def process_command(func_name, args, kwargs):
             return True, json.dumps(navigation.get_tile_histogram(*args, **kwargs))
         elif func_name == "get_local_grid_ascii":
             return True, json.dumps(navigation.get_local_grid_ascii(*args, **kwargs))
+        elif func_name == "get_known_warps":
+            return True, json.dumps(navigation.get_known_warps(*args, **kwargs))
+        elif func_name == "find_path_to":
+            return True, json.dumps(navigation.find_path_to(*args, **kwargs))
+        elif func_name == "find_path_to_nearest_warp":
+            return True, json.dumps(navigation.find_path_to_nearest_warp(*args, **kwargs))
         elif func_name == "get_player_status":
             return True, str(navigation.get_player_status())
         elif func_name == "move_direction":

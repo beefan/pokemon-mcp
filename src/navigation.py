@@ -15,6 +15,7 @@ class Navigation:
         self.battle_engine = battle_engine
         self._collision_cache = {}
         self._last_scan_origin = None
+        self._world_memory = {}
 
     def get_local_map(self):
         """
@@ -262,9 +263,44 @@ class Navigation:
         px, py = self.emulator.get_player_position()
         grid_data = self._scanner_local_grid_data(px, py)
         self._cache_collision_map(px, py, grid_data["collision"])
+        self._remember_collision_map(self.emulator.get_map_id(), grid_data["collision"])
 
     def _get_collision_tile(self, pos):
         return self._collision_cache.get(pos)
+
+    def _get_memory_bucket(self, map_id):
+        bucket = self._world_memory.get(map_id)
+        if bucket is None:
+            bucket = {
+                "tiles": {},
+                "warps": {}
+            }
+            self._world_memory[map_id] = bucket
+        return bucket
+
+    def _remember_collision_map(self, map_id, collision_map):
+        bucket = self._get_memory_bucket(map_id)
+        tiles = bucket["tiles"]
+        warps = bucket["warps"]
+        for pos, data in collision_map.items():
+            tiles[pos] = {
+                "char": data.get("char"),
+                "tid": data.get("tid"),
+                "walkable": data.get("walkable")
+            }
+            ch = data.get("char")
+            if ch in ("S", ">"):
+                warps[pos] = {
+                    "type": "Stairs" if ch == "S" else "Door",
+                    "pos": pos,
+                    "required_direction": "up" if ch == ">" else "into it"
+                }
+
+    def get_known_warps(self, map_id=None):
+        if map_id is None:
+            map_id = self.emulator.get_map_id()
+        bucket = self._get_memory_bucket(map_id)
+        return list(bucket["warps"].values())
 
     def _char_is_walkable(self, char):
         if not char:
@@ -461,6 +497,135 @@ class Navigation:
             total_path.append(current)
         total_path.reverse()
         return total_path[1:] # Exclude start
+
+    def _path_to_directions(self, start_pos, path):
+        directions = []
+        current = start_pos
+        for step in path:
+            dx = step[0] - current[0]
+            dy = step[1] - current[1]
+            if dx == 1 and dy == 0:
+                directions.append("right")
+            elif dx == -1 and dy == 0:
+                directions.append("left")
+            elif dx == 0 and dy == 1:
+                directions.append("down")
+            elif dx == 0 and dy == -1:
+                directions.append("up")
+            current = step
+        return directions
+
+    def _find_path_in_memory(self, map_id, start_pos, target_pos, max_nodes=2000):
+        bucket = self._get_memory_bucket(map_id)
+        tiles = bucket["tiles"]
+        if target_pos not in tiles:
+            return None
+
+        if start_pos == target_pos:
+            return []
+
+        queue = deque([start_pos])
+        came_from = {start_pos: None}
+        nodes_explored = 0
+
+        while queue and nodes_explored < max_nodes:
+            nodes_explored += 1
+            current = queue.popleft()
+            if current == target_pos:
+                break
+            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                neighbor = (current[0] + dx, current[1] + dy)
+                if neighbor in came_from:
+                    continue
+                tile = tiles.get(neighbor)
+                if tile is None and neighbor != target_pos:
+                    continue
+                if neighbor != target_pos and not tile.get("walkable", False):
+                    continue
+                came_from[neighbor] = current
+                queue.append(neighbor)
+
+        if target_pos not in came_from:
+            return None
+
+        return self._reconstruct_path(came_from, target_pos)
+
+    def find_path_to(self, target_x, target_y, use_memory=False, max_nodes=1000):
+        self._refresh_collision_cache()
+        map_id = self.emulator.get_map_id()
+        current_x, current_y = self.emulator.get_player_position()
+        start_pos = (current_x, current_y)
+        target_pos = (target_x, target_y)
+
+        used_memory = False
+        path = None
+        if use_memory and self._get_collision_tile(target_pos) is None:
+            path = self._find_path_in_memory(map_id, start_pos, target_pos, max_nodes=max_nodes)
+            used_memory = path is not None
+
+        if path is None:
+            path = self.find_path(start_pos, target_pos, max_nodes=max_nodes)
+
+        if path is None:
+            return {
+                "map_id": map_id,
+                "start": start_pos,
+                "target": target_pos,
+                "path": None,
+                "directions": [],
+                "length": 0,
+                "used_memory": used_memory,
+                "error": "no_path_found"
+            }
+
+        return {
+            "map_id": map_id,
+            "start": start_pos,
+            "target": target_pos,
+            "path": path,
+            "directions": self._path_to_directions(start_pos, path),
+            "length": len(path),
+            "used_memory": used_memory
+        }
+
+    def find_path_to_nearest_warp(self, use_memory=True, max_nodes=2000):
+        self._refresh_collision_cache()
+        map_id = self.emulator.get_map_id()
+        current_x, current_y = self.emulator.get_player_position()
+        start_pos = (current_x, current_y)
+
+        warps = self.get_known_warps(map_id)
+        if not warps:
+            return {
+                "map_id": map_id,
+                "start": start_pos,
+                "target": None,
+                "path": None,
+                "directions": [],
+                "length": 0,
+                "used_memory": False,
+                "error": "no_known_warps"
+            }
+
+        warps.sort(key=lambda w: abs(w["pos"][0] - start_pos[0]) + abs(w["pos"][1] - start_pos[1]))
+
+        for warp in warps:
+            target_pos = warp["pos"]
+            result = self.find_path_to(target_pos[0], target_pos[1], use_memory=use_memory, max_nodes=max_nodes)
+            if result.get("path") is not None:
+                result["target_warp"] = warp
+                return result
+
+        return {
+            "map_id": map_id,
+            "start": start_pos,
+            "target": None,
+            "path": None,
+            "directions": [],
+            "length": 0,
+            "used_memory": use_memory,
+            "error": "no_reachable_warp"
+        }
 
     def get_player_status(self):
         """
