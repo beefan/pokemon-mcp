@@ -314,10 +314,8 @@ class Navigation:
         return False
 
     def _is_tile_walkable(self, pos):
-        tile = self._get_collision_tile(pos)
-        if not tile:
-            return True
-        return tile.get("walkable", True)
+        """Checks walkability using the definitive collision map data from the emulator."""
+        return self.emulator.is_walkable(pos[0], pos[1])
 
     def _adjacent_walkable_positions(self, target_x, target_y):
         adjacents = [

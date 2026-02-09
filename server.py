@@ -12,6 +12,7 @@ from src.navigation import Navigation
 from src.battle import Battle
 from src.game_state import GameState
 from src.vision import VisionSystem
+from src.collision import CollisionGrid
 
 from PIL.Image import Image
 import asyncio
@@ -29,6 +30,7 @@ navigation = None
 battle = None
 game_state = None
 vision = None
+collision = None
 
 # Thread-safe Command Queue
 command_queue = queue.Queue()
@@ -169,6 +171,15 @@ async def get_local_grid_ascii(radius: int = 6, show_tid: bool = False, show_wal
     - show_walkable: append walkability flags per cell.
     """
     return run_on_main("get_local_grid_ascii", radius, show_tid, show_walkable)
+
+@mcp.tool()
+async def get_collision_grid(radius: int = 6) -> str:
+    """
+    Returns a grid of booleans indicating true walkability based on the game's collision map data.
+    This is the most reliable way to determine if a tile is passable.
+    True = Walkable, False = Blocked.
+    """
+    return run_on_main("get_collision_grid", radius)
 
 @mcp.tool()
 async def get_known_warps(map_id: int = None) -> str:
@@ -353,6 +364,7 @@ def init_emulator(rom_path):
     navigation = Navigation(emulator, battle)
     game_state = GameState(emulator)
     vision = VisionSystem()
+    collision = CollisionGrid(emulator)
 
 def process_command(func_name, args, kwargs):
     """Executes a command using the global instances (Called on Main Thread)."""
@@ -381,6 +393,8 @@ def process_command(func_name, args, kwargs):
             return True, json.dumps(navigation.get_tile_histogram(*args, **kwargs))
         elif func_name == "get_local_grid_ascii":
             return True, json.dumps(navigation.get_local_grid_ascii(*args, **kwargs))
+        elif func_name == "get_collision_grid":
+            return True, json.dumps(collision.get_collision_grid(*args, **kwargs))
         elif func_name == "get_known_warps":
             return True, json.dumps(navigation.get_known_warps(*args, **kwargs))
         elif func_name == "find_path_to":

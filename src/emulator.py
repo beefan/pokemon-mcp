@@ -326,10 +326,21 @@ class PokemonEmulator:
             return f"Error: Save file {filepath} not found."
         with open(filepath, "rb") as f:
             self.pyboy.load_state(f)
-        return f"Game state loaded from {filepath}"
-
-
-    def get_background_tiles(self):
+                return f"Game state loaded from {filepath}"
+        
+            def is_walkable(self, x, y):
+                """Checks if a specific tile is walkable based on the true collision map data."""
+                try:
+                    map_width = self.read_ram(0xD35D)
+                    offset = y * map_width + x
+                    collision_addr = COLLISION_MAP_START_ADDR + offset
+                    collision_byte = self.read_ram(collision_addr)
+                    return collision_byte == 0x00
+                except Exception:
+                    # If we read out of bounds or another error occurs, default to not walkable for safety.
+                    return False
+        
+            def get_background_tiles(self):
         """
         Returns a 20x18 matrix of tile IDs from the Background layer.
         Accounts for Scroll X (SCX) and Scroll Y (SCY).
