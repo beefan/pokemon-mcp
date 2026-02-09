@@ -891,3 +891,52 @@ class Navigation:
             # Very brief tap to shift sub-pixel/collision state
             self.emulator.input(btn, hold_frames=2)
             self.emulator.tick(2)
+
+    def walk_to_with_path_check(self, target_x, target_y, max_steps=100):
+        """
+        A robust version of walk_to that intelligently handles unexpected collisions.
+        It learns from failed movements and recalculates the path.
+        Returns: "arrived", "blocked", "max_steps_reached"
+        """
+        known_walls = set()
+        steps_taken = 0
+
+        while steps_taken < max_steps:
+            current_x, current_y = self.emulator.get_player_position()
+            current_pos = (current_x, current_y)
+            target_pos = (target_x, target_y)
+
+            if current_pos == target_pos:
+                return "arrived"
+
+            # Find the next path, avoiding known walls
+            self._refresh_collision_cache()
+            path = self.find_path(current_pos, target_pos, known_walls=known_walls)
+
+            if not path:
+                return f"blocked: no path found to {target_pos} from {current_pos} with known_walls: {known_walls}"
+
+            next_step = path[0]
+
+            # Determine direction and execute move
+            direction = self._direction_to_target(current_pos, next_step)
+            if direction:
+                button = DIRECTION_TO_BUTTON[direction]
+                self.emulator.input(button, hold_frames=8) # Slightly longer hold for reliability
+                self.emulator.tick(10)
+                steps_taken += 1
+            else:
+                # Should not happen if path is valid
+                known_walls.add(next_step)
+                continue
+
+            # Verify if the move was successful
+            new_pos = self.emulator.get_player_position()
+            if new_pos == current_pos:
+                # Move failed, the next_step is a wall
+                known_walls.add(next_step)
+
+            # Small delay to let the game state settle
+            self.emulator.tick(5)
+
+        return "max_steps_reached"

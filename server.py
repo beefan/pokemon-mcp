@@ -337,6 +337,19 @@ async def press_buttons(sequence: str) -> str:
         _auto_checkpoint("buttons", sequence)
     return result
 
+@mcp.tool()
+async def walk_to_with_path_check(x: int, y: int, max_steps: int = 100) -> str:
+    """
+    PRIMARY NAVIGATION: Moves the player to a target, intelligently navigating around unexpected obstacles.
+    This tool learns from collisions and recalculates the path.
+    Returns: 'arrived', 'blocked', or 'max_steps_reached'.
+    """
+    result = run_on_main("walk_to_with_path_check", x, y, max_steps)
+    if AUTO_CHECKPOINT_ENABLED and result == "arrived":
+        _auto_checkpoint("walk_to_with_path_check", f"target=({x},{y}) result={result}")
+    return result
+
+
 def init_emulator(rom_path):
     global emulator, navigation, battle, game_state, vision
     if not os.path.exists(rom_path):
@@ -391,6 +404,8 @@ def process_command(func_name, args, kwargs):
             return True, result
         elif func_name == "walk_to":
             return True, navigation.walk_to(*args, **kwargs)
+        elif func_name == "walk_to_with_path_check":
+            return True, navigation.walk_to_with_path_check(*args, **kwargs)
         elif func_name == "interact_with":
             return True, navigation.interact_with(*args, **kwargs)
         elif func_name == "execute_battle_turn":
