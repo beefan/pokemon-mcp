@@ -12,6 +12,10 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
 3. **Load Save**: Call `load_game(name='...')` with the save name (without `.state`).
 4. **Verify**: Call `get_player_status()` and proceed from the latest objective.
 
+## Saving & Journaling
+1. Every save—auto or manual—writes a `game_journal` entry that documents the context (including the trigger text and position) and records the exact state file name (e.g., `auto_20260209T104500123Z.state` or `arrived_in_bedroom.state`).
+2. Auto-checkpoints now produce timestamped filenames and the system keeps the 50 most recent `.state` files under `saves/`, so you can rely on a larger buffer of rollback points without manual cleanup.
+
 > [!NOTE]
 > Auto-checkpoints are saved after key actions (movement, interactions, dialogue, battle turns, macros).
 > Journal entries also trigger a save so state and notes stay in sync.

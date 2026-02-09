@@ -21,6 +21,7 @@ import time
 import queue
 import json
 import datetime
+import shutil
 
 # Global Instances
 emulator = None
@@ -43,8 +44,9 @@ AUTO_CHECKPOINT_ACTIONS = {
     "press_buttons",
 }
 
-AUTO_SAVE_LATEST = "auto_latest.state"
-AUTO_SAVE_BACKUP = "auto_backup.state"
+AUTO_SAVE_PREFIX = "auto_"
+AUTO_STATE_EXTENSION = ".state"
+AUTO_CHECKPOINT_LIMIT = 50
 MANUAL_SAVE_BACKUP_SUFFIX = "_backup.state"
 
 def run_on_main(func_name, *args, **kwargs):
@@ -63,14 +65,14 @@ def _auto_checkpoint(reason: str, note: str = ""):
 
 def _rotate_manual_saves(target_name: str):
     """Keep only target + target_backup for manual saves; rotate most recent prior save to backup."""
-    os.makedirs("saves", exist_ok=True)
+    _ensure_saves_dir()
     target_file = f"{target_name}.state"
     backup_file = f"{target_name}{MANUAL_SAVE_BACKUP_SUFFIX}"
     existing = []
     for fname in os.listdir("saves"):
         if not fname.endswith(".state"):
             continue
-        if fname in (AUTO_SAVE_LATEST, AUTO_SAVE_BACKUP):
+        if fname.startswith(AUTO_SAVE_PREFIX):
             continue
         existing.append(fname)
     if target_file in existing:
@@ -88,6 +90,38 @@ def _rotate_manual_saves(target_name: str):
         existing = existing[1:]
     for fname in existing:
         os.remove(os.path.join("saves", fname))
+
+def _ensure_saves_dir():
+    os.makedirs("saves", exist_ok=True)
+
+
+def _auto_checkpoint_filename():
+    timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%S%fZ")
+    return f"{AUTO_SAVE_PREFIX}{timestamp}{AUTO_STATE_EXTENSION}"
+
+
+def _prune_auto_checkpoints():
+    _ensure_saves_dir()
+    auto_files = []
+    for fname in os.listdir("saves"):
+        if not (fname.startswith(AUTO_SAVE_PREFIX) and fname.endswith(AUTO_STATE_EXTENSION)):
+            continue
+        path = os.path.join("saves", fname)
+        auto_files.append((path, os.path.getmtime(path)))
+    if len(auto_files) <= AUTO_CHECKPOINT_LIMIT:
+        return
+    auto_files.sort(key=lambda item: item[1])
+    for path, _ in auto_files[:-AUTO_CHECKPOINT_LIMIT]:
+        os.remove(path)
+
+
+def _log_save_entry(context: str, filename: str):
+    if game_state is None:
+        return
+    map_id = emulator.get_map_id()
+    px, py = emulator.get_player_position()
+    entry = f"{context} | map={map_id} pos=({px},{py}) | file={os.path.basename(filename)}"
+    game_state.write_journal_entry(entry)
 
 def get_emulator_info():
     """Returns info about the global instances (safe to call from background)."""
@@ -369,15 +403,6 @@ def process_command(func_name, args, kwargs):
             return True, str(emulator.read_ram_region(*args, **kwargs))
         elif func_name == "write_journal_entry":
             result = game_state.write_journal_entry(*args, **kwargs)
-            if AUTO_CHECKPOINT_ENABLED:
-                os.makedirs("saves", exist_ok=True)
-                latest = os.path.join("saves", AUTO_SAVE_LATEST)
-                backup = os.path.join("saves", AUTO_SAVE_BACKUP)
-                if os.path.exists(backup):
-                    os.remove(backup)
-                if os.path.exists(latest):
-                    os.rename(latest, backup)
-                emulator.save_state(latest)
             return True, result
         elif func_name == "advance_dialogue":
             return True, emulator.advance_dialogue()
@@ -392,26 +417,25 @@ def process_command(func_name, args, kwargs):
         elif func_name == "screen_image":
             return True, emulator.screen_image()
         elif func_name == "save_state":
-            return True, emulator.save_state(*args, **kwargs)
+            filename = args[0] if args else kwargs.get("filename")
+            result = emulator.save_state(*args, **kwargs)
+            if filename:
+                _log_save_entry("Manual save", filename)
+            return True, result
         elif func_name == "load_state":
             return True, emulator.load_state(*args, **kwargs)
         elif func_name == "auto_checkpoint":
             reason, note = args
-            map_id = emulator.get_map_id()
-            px, py = emulator.get_player_position()
-            entry = f"Checkpoint: {reason} | map={map_id} pos=({px},{py})"
+            save_name = _auto_checkpoint_filename()
+            _ensure_saves_dir()
+            file_path = os.path.join("saves", save_name)
+            context = f"Checkpoint: {reason}"
             if note:
-                entry = f"{entry} | {note}"
-            game_state.write_journal_entry(entry)
-            os.makedirs("saves", exist_ok=True)
-            latest = os.path.join("saves", AUTO_SAVE_LATEST)
-            backup = os.path.join("saves", AUTO_SAVE_BACKUP)
-            if os.path.exists(backup):
-                os.remove(backup)
-            if os.path.exists(latest):
-                os.rename(latest, backup)
-            emulator.save_state(latest)
-            return True, f"Auto-checkpoint saved to {latest}"
+                context = f"{context} | {note}"
+            emulator.save_state(file_path)
+            _log_save_entry(context, file_path)
+            _prune_auto_checkpoints()
+            return True, f"Auto-checkpoint saved to {file_path}"
         elif func_name == "wait":
             return True, emulator.wait(*args, **kwargs)
         elif func_name == "press_button":
