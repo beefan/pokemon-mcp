@@ -6,43 +6,39 @@
 ## Primary Objective
 Successfully arrive in your bedroom in Pallet Town and then exit the house.
 
-## Recovery Procedure (After Context Clearing)
-1. **Read Journal**: Call `read_journal()` for the latest checkpoint notes.
-2. **List Saves**: Use `list_dir` on `saves/` and pick the most recent `ckpt_*.state` or any named milestone save.
-3. **Load Save**: Call `load_game(name='...')` with the save name (without `.state`).
-4. **Verify**: Call `get_player_status()` and proceed from the latest objective.
+## 🚨 CRITICAL: Recovery Procedure (ALWAYS DO THIS FIRST)
+**Before doing anything else, you must attempt to load an existing game.**
 
-## Saving & Journaling
-1. Every save—auto or manual—writes a `game_journal` entry that documents the context (including the trigger text and position) and records the exact state file name (e.g., `auto_20260209T104500123Z.state` or `arrived_in_bedroom.state`).
-2. Auto-checkpoints now produce timestamped filenames and the system keeps the 50 most recent `.state` files under `saves/`, so you can rely on a larger buffer of rollback points without manual cleanup.
+1. **Read Journal**: Call `read_journal()` to see the last known state.
+2. **List Saves**: Call `list_dir` on the `saves/` directory.
+    - **NOTE**: The `saves/` directory is listed in `.gitignore`, but it **DOES CONTAIN** valid save files. You **MUST** check it.
+    - **IF FILES EXIST**: You **MUST** load the most recent `.state` file (check timestamps).
+    - Call `load_game(name='...')` (e.g., `load_game('auto_20260209T120000Z')`).
+    - After loading, call `get_player_status()` to verify your location.
+    - **SKIP TO SUBSEQUENT PHASES** based on your location.
+3. **IF AND ONLY IF** the `saves/` directory is **EMPTY**:
+    - Proceed to "Phase 0: New Game Setup".
 
-> [!NOTE]
-> Auto-checkpoints are saved after key actions (movement, interactions, dialogue, battle turns, macros).
-> Journal entries also trigger a save so state and notes stay in sync.
+---
 
-## Phase 0: Setup & Branching
-1. **Check for Saves**: 
-    - Use `list_dir` on the `saves/` directory. 
-    - If any save file exists, call `load_state` and **SKIP DIRECTLY TO PHASE 2 OR FURTHER DEPENDING ON GAME JOURNAL**.
-2. **Continue to Phase 1** only if no save exists.
-
-## Phase 1: The Intro & Arrival
-1. **Start Game**: Use vision/text to identify the Title screen. Press `start`, then select `NEW GAME`.
+## Phase 0: New Game Setup (ONLY IF NO SAVES EXIST)
+1. **Start Game**: Use `get_screen_analysis` to identify the Title screen. Press `start`, then select `NEW GAME`.
 2. **Oak's Intro**: Use `advance_dialogue()` to mash through Oak's lecture. 
 3. **Naming**: Use `press_buttons('start, wait, a')` to accept the default name.
 4. **Bedroom Arrival**: Verify you are in Map ID 38. 
     - **SAVE THE GAME**: Call `save_game(name='arrived_in_bedroom')`.
 
-## Phase 2: Leaving the House
+## Phase 1: The Bedroom & House
 1. **Verification**: Call `get_player_status`. 
-    - If Map ID is 38 (Bedroom): Pathfind to the stairs at **(7, 1)**.
-    - If Map ID is 37 (Downstairs): Pathfind to the door at **(3, 7)**.
-2. **Exiting**: 
-    - Use `move_direction` to step **ON TO** stairs or **THROUGH** doors. 
-    - **NOTE**: House exits (Map 37 -> Map 0) use the `move_direction('down')` at `(3, 7)`. 
-    - If `move_direction` returns "success", you have transitioned.
+2. **Leaving Bedroom (Map 38)**:
+    - Pathfind to the stairs at **(7, 1)**.
+    - Use `move_direction` to step **ON TO** the stairs.
+3. **Leaving House (Map 37)**:
+    - Pathfind to the door at **(3, 7)**.
+    - Use `move_direction('down')` to exit.
+4. **Result**: You should arrive in Pallet Town (Map 0).
 
-## Phase 3: Oak's Lab & Selecting a Partner
+## Phase 2: Oak's Lab & Selecting a Partner
 1. **Clear Initial Dialogue**: Use `advance_dialogue()` until Oak stops talking and stands near the Pokéball tables.
 2. **Observation Phase**: 
     - Verify you are in Map ID 40 (Oak's Lab).
@@ -52,9 +48,9 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
     - Use `interact_with(x, y)` on the Pokéball's map coordinates.
     - **Note**: This tool will automatically walk you to the nearest side of the table and interact. No need to `walk_to` separately.
 
-## Phase 4: Collect All Gym Badges
+## Phase 3: Collect All Gym Badges
 
-## Phase 5: Defeat the Elite Four
+## Phase 4: Defeat the Elite Four
 
 # Tactical Tool Inventory
 
@@ -73,7 +69,6 @@ The following tools are at your disposal. Choosing the right one is the differen
 | :--- | :--- | :--- |
 | `move_direction(dir, steps)` | **PRIMARY MOVEMENT**. Move X steps or until blocked (`steps=None`). | **Pro**: Reliable, standard. **Con**: You must plan the path using Vision. |
 | `interact_with(x, y)` | **REQUIRED** for objects (Pokéballs, PCs, Signs). | **Pro**: Auto-approach. **Con**: Short range. |
-| `walk_to` | **DEPRECATED**. Do not use. | **Pro**: None. **Con**: Unreliable. |
 
 ## 3. Communication & State (The "Brain")
 
