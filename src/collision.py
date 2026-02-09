@@ -38,10 +38,9 @@ class CollisionGrid:
                 # This logic may need refinement based on testing.
                 collision_byte = self.emulator.read_ram(collision_addr)
                 
-                # We will assume for now that 0 means walkable and anything else is a wall.
                 # This is a common pattern in Gen 1 games.
                 is_walkable = collision_byte == 0x00
-                grid[(x, y)] = is_walkable
+                grid[f"{x},{y}"] = is_walkable
                 
         return {
             "map_id": self.emulator.get_map_id(),
