@@ -113,6 +113,64 @@ class Navigation:
             "tiles": results,
         }
 
+    def get_local_grid_ascii(self, radius=6, show_tid=False, show_walkable=False):
+        """
+        Returns a compact ASCII grid centered on the player.
+        - show_tid: append hex tile IDs per cell (less compact).
+        - show_walkable: append walkability flags per cell.
+        """
+        px, py = self.emulator.get_player_position()
+        self._refresh_collision_cache()
+        size = radius * 2 + 1
+
+        def fmt_cell(tile):
+            if not tile:
+                base = "??"
+                tid = "??"
+                walk = "?"
+            else:
+                ch = tile.get("char")
+                base = ch if isinstance(ch, str) else "?"
+                if len(base) == 1:
+                    base = base + " "
+                elif len(base) > 2:
+                    base = base[:2]
+                tid = f"{tile.get('tid'):02X}" if tile.get("tid") is not None else "??"
+                walk = "Y" if tile.get("walkable") else "N"
+
+            if show_tid and show_walkable:
+                return f"{base}{tid}{walk}"
+            if show_tid:
+                return f"{base}{tid}"
+            if show_walkable:
+                return f"{base}{walk}"
+            return base
+
+        rows = []
+        col_headers = "    "
+        for dx in range(-radius, radius + 1):
+            col_headers += f"{px + dx:3}"
+        rows.append(col_headers)
+
+        for dy in range(-radius, radius + 1):
+            row_label = f"{py + dy:3} "
+            cells = []
+            for dx in range(-radius, radius + 1):
+                gx, gy = px + dx, py + dy
+                tile = self._get_collision_tile((gx, gy))
+                cells.append(fmt_cell(tile))
+            rows.append(row_label + " ".join(cells))
+
+        legend = "Legend: base=char, tid=hex, walkable=Y/N"
+        return {
+            "map_id": self.emulator.get_map_id(),
+            "position": (px, py),
+            "radius": radius,
+            "size": size,
+            "grid": "\n".join(rows),
+            "legend": legend,
+        }
+
     def _scanner_local_grid_data(self, px, py):
         """
         Scans the local area around the player.

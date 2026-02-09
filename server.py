@@ -79,6 +79,15 @@ async def get_tile_histogram(radius: int = 6) -> str:
     """
     return run_on_main("get_tile_histogram", radius)
 
+@mcp.tool()
+async def get_local_grid_ascii(radius: int = 6, show_tid: bool = False, show_walkable: bool = False) -> str:
+    """
+    Returns a compact ASCII grid centered on the player.
+    - show_tid: append hex tile IDs per cell (less compact).
+    - show_walkable: append walkability flags per cell.
+    """
+    return run_on_main("get_local_grid_ascii", radius, show_tid, show_walkable)
+
 # @mcp.tool()
 # async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
 #     """DEPRECATED: Use move_direction sequences based on vision."""
@@ -245,6 +254,8 @@ def process_command(func_name, args, kwargs):
             return True, json.dumps(navigation.get_local_grid(*args, **kwargs))
         elif func_name == "get_tile_histogram":
             return True, json.dumps(navigation.get_tile_histogram(*args, **kwargs))
+        elif func_name == "get_local_grid_ascii":
+            return True, json.dumps(navigation.get_local_grid_ascii(*args, **kwargs))
         elif func_name == "get_player_status":
             return True, str(navigation.get_player_status())
         elif func_name == "move_direction":
