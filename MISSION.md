@@ -6,6 +6,16 @@
 ## Primary Objective
 Successfully arrive in your bedroom in Pallet Town and then exit the house.
 
+## Recovery Procedure (After Context Clearing)
+1. **Read Journal**: Call `read_journal()` for the latest checkpoint notes.
+2. **List Saves**: Use `list_dir` on `saves/` and pick the most recent `ckpt_*.state` or any named milestone save.
+3. **Load Save**: Call `load_game(name='...')` with the save name (without `.state`).
+4. **Verify**: Call `get_player_status()` and proceed from the latest objective.
+
+> [!NOTE]
+> Auto-checkpoints are saved after key actions (movement, interactions, dialogue, battle turns, macros).
+> Journal entries also trigger a save so state and notes stay in sync.
+
 ## Phase 0: Setup & Branching
 1. **Check for Saves**: 
     - Use `list_dir` on the `saves/` directory. 

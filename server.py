@@ -20,6 +20,7 @@ import time
 
 import queue
 import json
+import datetime
 
 # Global Instances
 emulator = None
@@ -32,6 +33,16 @@ vision = None
 command_queue = queue.Queue()
 response_queue = queue.Queue()
 
+# Auto-checkpoint config
+AUTO_CHECKPOINT_ENABLED = True
+AUTO_CHECKPOINT_ACTIONS = {
+    "move_direction",
+    "interact_with",
+    "advance_dialogue",
+    "execute_battle_turn",
+    "press_buttons",
+}
+
 def run_on_main(func_name, *args, **kwargs):
     """Sends a command to the main thread and waits for the result."""
     command_queue.put((func_name, args, kwargs))
@@ -40,6 +51,17 @@ def run_on_main(func_name, *args, **kwargs):
     if not success:
         raise result
     return result
+
+def _checkpoint_name(reason: str) -> str:
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_reason = "".join(c if c.isalnum() or c in "-_" else "_" for c in reason)
+    return f"ckpt_{ts}_{safe_reason}" if safe_reason else f"ckpt_{ts}"
+
+def _auto_checkpoint(reason: str, note: str = ""):
+    if not AUTO_CHECKPOINT_ENABLED:
+        return None
+    name = _checkpoint_name(reason)
+    return run_on_main("auto_checkpoint", name, reason, note)
 
 def get_emulator_info():
     """Returns info about the global instances (safe to call from background)."""
@@ -100,7 +122,10 @@ async def interact_with(x: int, y: int) -> str:
     REQUIRED: Use this for Pokéballs on tables, PCs, signs, or talking to stationary people.
     Logic: This tool will automatically walk you to the nearest side of the object and press 'A'.
     """
-    return run_on_main("interact_with", x, y)
+    result = run_on_main("interact_with", x, y)
+    if AUTO_CHECKPOINT_ENABLED:
+        _auto_checkpoint("interact", f"target=({x},{y}) result={result}")
+    return result
 
 @mcp.tool()
 async def get_player_status() -> str:
@@ -118,12 +143,18 @@ async def move_direction(direction: str, steps: int = 1) -> str:
     - Set `steps=None` to move until blocked (useful for long corridors).
     Returns: 'arrived', 'blocked', 'transitioned', or 'battle'.
     """
-    return run_on_main("move_direction", direction, steps)
+    result = run_on_main("move_direction", direction, steps)
+    if AUTO_CHECKPOINT_ENABLED and result != "blocked":
+        _auto_checkpoint(f"move_{direction}", f"steps={steps} result={result}")
+    return result
 
 @mcp.tool()
 async def execute_battle_turn(action: str) -> str:
     """Executes a high-level battle action."""
-    return run_on_main("execute_battle_turn", action)
+    result = run_on_main("execute_battle_turn", action)
+    if AUTO_CHECKPOINT_ENABLED:
+        _auto_checkpoint("battle_turn", f"action={action} result={result}")
+    return result
 
 @mcp.tool()
 async def get_party_info() -> str:
@@ -147,7 +178,10 @@ async def advance_dialogue() -> str:
     Use this for ALL long conversations, cutscenes, or lectures (like Oak's Intro).
     NEVER use manual press_buttons to progress dialogue as you may lose state context.
     """
-    return run_on_main("advance_dialogue")
+    result = run_on_main("advance_dialogue")
+    if AUTO_CHECKPOINT_ENABLED:
+        _auto_checkpoint("dialogue")
+    return result
 
 @mcp.tool()
 async def describe_tile(x: int, y: int, coordinate_type: str = "screen") -> str:
@@ -213,7 +247,10 @@ async def press_buttons(sequence: str) -> str:
     Example: 'start,wait,a'
     Available: a, b, start, select, up, down, left, right, wait
     """
-    return run_on_main("press_buttons", sequence)
+    result = run_on_main("press_buttons", sequence)
+    if AUTO_CHECKPOINT_ENABLED:
+        _auto_checkpoint("buttons", sequence)
+    return result
 
 def init_emulator(rom_path):
     global emulator, navigation, battle, game_state, vision
@@ -259,7 +296,8 @@ def process_command(func_name, args, kwargs):
         elif func_name == "get_player_status":
             return True, str(navigation.get_player_status())
         elif func_name == "move_direction":
-            return True, str(emulator.move_direction(*args, **kwargs))
+            result = str(emulator.move_direction(*args, **kwargs))
+            return True, result
         elif func_name == "walk_to":
             return True, navigation.walk_to(*args, **kwargs)
         elif func_name == "interact_with":
@@ -273,7 +311,13 @@ def process_command(func_name, args, kwargs):
         elif func_name == "read_ram_region":
             return True, str(emulator.read_ram_region(*args, **kwargs))
         elif func_name == "write_journal_entry":
-            return True, game_state.write_journal_entry(*args, **kwargs)
+            result = game_state.write_journal_entry(*args, **kwargs)
+            if AUTO_CHECKPOINT_ENABLED:
+                name = _checkpoint_name("journal")
+                filename = f"saves/{name}.state"
+                os.makedirs("saves", exist_ok=True)
+                emulator.save_state(filename)
+            return True, result
         elif func_name == "advance_dialogue":
             return True, emulator.advance_dialogue()
         elif func_name == "describe_tile":
@@ -290,6 +334,18 @@ def process_command(func_name, args, kwargs):
             return True, emulator.save_state(*args, **kwargs)
         elif func_name == "load_state":
             return True, emulator.load_state(*args, **kwargs)
+        elif func_name == "auto_checkpoint":
+            name, reason, note = args
+            map_id = emulator.get_map_id()
+            px, py = emulator.get_player_position()
+            entry = f"Checkpoint: {reason} | map={map_id} pos=({px},{py})"
+            if note:
+                entry = f"{entry} | {note}"
+            game_state.write_journal_entry(entry)
+            filename = f"saves/{name}.state"
+            os.makedirs("saves", exist_ok=True)
+            emulator.save_state(filename)
+            return True, f"Auto-checkpoint saved to {filename}"
         elif func_name == "wait":
             return True, emulator.wait(*args, **kwargs)
         elif func_name == "press_button":
