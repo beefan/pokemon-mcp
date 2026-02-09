@@ -1,4 +1,5 @@
 import heapq
+from collections import deque
 from src.emulator import PokemonEmulator
 from src.constants import *
 
@@ -498,6 +499,10 @@ class Navigation:
         known_walls = set()
         avoid_set = set(avoid_positions) if avoid_positions else set()
         steps_taken = 0
+        recent_positions = deque(maxlen=6)
+        last_distance = None
+        stagnant_steps = 0
+        last_debug = None
         
         while steps_taken < max_steps:
             self._refresh_collision_cache()
@@ -523,16 +528,41 @@ class Navigation:
 
             if not warp_entry_direction and current_pos == target_pos:
                 return "arrived"
+            
+            # Track progress / oscillation
+            recent_positions.append(current_pos)
+            if len(recent_positions) >= 4:
+                if (recent_positions[-1] == recent_positions[-3] and
+                    recent_positions[-2] == recent_positions[-4]):
+                    # Oscillation detected, avoid current tile to force re-path
+                    avoid_set.add(current_pos)
+                    last_debug = f"oscillation_detected at {current_pos}, avoiding tile"
+                    continue
+
+            distance = abs(current_x - path_target[0]) + abs(current_y - path_target[1])
+            if last_distance is not None and distance >= last_distance:
+                stagnant_steps += 1
+            else:
+                stagnant_steps = 0
+            last_distance = distance
                 
             # 2. Pathfind
             # Increased node limit for larger maps or complex paths
             path = self.find_path(current_pos, path_target, known_walls, avoid_set, max_nodes=1000)
             if not path:
-                return f"blocked: no path found to ({target_x}, {target_y}) from your current position {current_pos}. Check if you are on an interactive tile (like stairs) and try moving away first."
+                extra = f" debug={last_debug}" if last_debug else ""
+                return f"blocked: no path found to ({target_x}, {target_y}) from your current position {current_pos}. Check if you are on an interactive tile (like stairs) and try moving away first.{extra}"
                 
             next_step = path[0]
             dx = next_step[0] - current_x
             dy = next_step[1] - current_y
+
+            if stagnant_steps >= 4:
+                # Force a different route if we aren't making progress
+                known_walls.add(next_step)
+                stagnant_steps = 0
+                last_debug = f"stagnant_progress at {current_pos}, blocking step {next_step}"
+                continue
             
             # 3. Check for Battle
             enemy_hp = self.emulator.read_ram(ENEMY_HP_ADDR)
@@ -605,10 +635,14 @@ class Navigation:
                     except:
                         known_walls.add(next_step)
                         continue
+            else:
+                recent_positions.append(new_pos)
             
             # Periodic tick to keep emulator healthy
             self.emulator.tick(1)
             
+        if last_debug:
+            return f"max_steps_reached: {last_debug}"
         return "max_steps_reached"
     def interact_with(self, target_x, target_y):
         """
@@ -657,12 +691,13 @@ class Navigation:
         adjacents.sort(key=lambda p: abs(p[0]-current_x) + abs(p[1]-current_y))
 
         # 3. Try walking to each
+        last_walk_error = None
         for ax, ay, face_dir in adjacents:
             # Check if tile itself is walkable (simplified)
             # Find path to see if accessible
             path = self.find_path((current_x, current_y), (ax, ay))
             if path is not None:
-                res = self.walk_to(ax, ay)
+                res = self.walk_to(ax, ay, max_steps=40)
                 if res == "arrived":
                     # 4. Face target and press A
                     btn_map = {
@@ -676,7 +711,10 @@ class Navigation:
                     self.emulator.input(BUTTON_A, hold_frames=5)
                     self.emulator.tick(5)
                     return "interaction_success"
+                last_walk_error = res
         
+        if last_walk_error:
+            return f"no_accessible_path: could not reach a tile adjacent to the target. last_walk={last_walk_error}"
         return "no_accessible_path: could not reach a tile adjacent to the target."
 
     def _lateral_recovery(self, perpendicular_btns):

@@ -48,6 +48,10 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
     - Use `interact_with(x, y)` on the Pokéball's map coordinates.
     - **Note**: This tool will automatically walk you to the nearest side of the table and interact. No need to `walk_to` separately.
 
+## Phase 4: Collect All Gym Badges
+
+## Phase 5: Defeat the Elite Four
+
 # Tactical Tool Inventory
 
 The following tools are at your disposal. Choosing the right one is the difference between a Junior Trainer and a Pokémon Master.
