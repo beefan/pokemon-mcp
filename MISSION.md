@@ -23,7 +23,7 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
 ## Phase 0: Setup & Branching
 1. **Check for Saves**: 
     - Use `list_dir` on the `saves/` directory. 
-    - If `arrived_in_bedroom.state` exists, call `load_state` and **SKIP DIRECTLY TO PHASE 2**.
+    - If any save file exists, call `load_state` and **SKIP DIRECTLY TO PHASE 2 OR FURTHER DEPENDING ON GAME JOURNAL**.
 2. **Continue to Phase 1** only if no save exists.
 
 ## Phase 1: The Intro & Arrival
