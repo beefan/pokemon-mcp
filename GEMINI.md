@@ -1,3 +1,23 @@
+# Development Workflow
+1. Use the Jira MCP to pick up a new issue, reading the ticket and marking it as in progress.
+2. Check out a new branch using git off main.
+3. Implement the changes required for the ticket.
+4. Test the changes using the provided test suite.
+5. Push the changes to the remote repository and use Github MCP to create a pull request.
+6. Use the Jira MCP to mark the ticket as in review.
+7. Stop and wait for human review.
+8. If no changes are required, the human will merge into main and ensure the local branch is pulled for your next ticket.
+9. If changes are required, the human will leave comments on your PR and instruct you to iterate on those changes.
+10. Iterate on changes, if necessary and push up additional commits. 
+11. Once the PR is approved and merged, use the Jira MCP to mark the ticket as done.
+
+Jira project: https://bfannin13.atlassian.net/jira/software/projects/PKM/boards/2
+
+Github repo: https://github.com/beefan/pokemon-mcp
+
+# Developer Practices
+NEVER commit secrets to the repository. Use environment variables to store sensitive information.
+
 🎮 Project: Pokémon Blue Strategic MCP
 🎯 Objective
 

@@ -10,39 +10,10 @@ DIRECTION_TO_BUTTON = {
     "right": BUTTON_RIGHT
 }
 class Navigation:
-    def __init__(self, emulator: PokemonEmulator, battle_engine=None):
+    def __init__(self, emulator: PokemonEmulator, collision_grid, battle_engine=None):
         self.emulator = emulator
         self.battle_engine = battle_engine
-        self._collision_cache = {}
-        self._last_scan_origin = None
-        self._world_memory = {}
-
-    def get_local_map(self):
-        """
-        Returns a dictionary containing map_id, position, and the grid.
-        Includes a legend, nearby warps, and identified objects.
-        """
-        map_id = self.emulator.get_map_id()
-        x, y = self.emulator.get_player_position()
-        
-        grid_data = self._scanner_local_grid_data(x, y)
-        grid_str = grid_data["grid_str"]
-        objects = grid_data["objects"]
-        collision_map = grid_data["collision"]
-        self._cache_collision_map(x, y, collision_map)
-        warps = self._find_on_screen_warps()
-        
-        serializable_collision = {
-            f"{pos[0]},{pos[1]}": data for pos, data in collision_map.items()
-        }
-        return {
-            "map_id": map_id,
-            "position": (x, y),
-            "grid": f"{grid_str}\n\nLegend: {GRID_LEGEND}",
-            "nearby_warps": warps,
-            "nearby_objects": objects,
-            "collision_map": serializable_collision
-        }
+        self.collision = collision_grid
 
     def get_local_grid(self, radius=2):
         """
@@ -173,100 +144,11 @@ class Navigation:
             "legend": legend,
         }
 
-    def _scanner_local_grid_data(self, px, py):
-        """
-        Scans the local area around the player.
-        Returns a dict with grid string, nearby objects, and detailed collision metadata.
-        """
-        try:
-            map_id = self.emulator.get_map_id()
-            # Get the raw tile IDs from the emulator VRAM
-            tile_ids = self.emulator.get_screen_tile_ids() # 20x18 matrix
-            
-            # 1. Column Headers (X coordinates)
-            col_headers = "    " # Padding for row labels
-            for x in range(20):
-                abs_x = px + (x - 10)
-                col_headers += f"{abs_x:2} "
-            
-            grid_rows = [col_headers]
-            found_objects = []
-            collision_map = {}
-            
-            # 2. Rows with labels
-            for y in range(18):
-                abs_y = py + (y - 9)
-                row_label = f"{abs_y:2} | "
-                row_chars = []
-                for x in range(20):
-                    tid = tile_ids[x][y] & 0xFF
-                    # Map ID to Char if known
-                    char = TILE_MAP.get(tid, None)
-                    
-                    # Global coords
-                    gx, gy = px + (x - 10), py + (y - 9)
 
-                    if char is None:
-                        # Default to an ID tag for unknown tiles so walkability logic can handle them.
-                        char = f"ID:0x{tid:02X}" if tid != 0 else ".."
-                    
-                    # Object Detection
-                    if char == "o":
-                        found_objects.append({"name": "Pokéball", "pos": (gx, gy)})
-                    elif char == "P" or char == "M":
-                        found_objects.append({"name": "Pokemon Symbol", "pos": (gx, gy)})
 
-                    map_walkable = MAP_WALKABLE_TILE_IDS.get(map_id, set())
-                    map_non_walkable = MAP_NON_WALKABLE_TILE_IDS.get(map_id, set())
 
-                    if tid in map_non_walkable:
-                        walkable = False
-                    elif tid in map_walkable:
-                        walkable = True
-                    elif tid in NON_WALKABLE_TILE_IDS:
-                        walkable = False
-                    elif tid in WALKABLE_TILE_IDS:
-                        walkable = True
-                    else:
-                        walkable = self._char_is_walkable(char)
-                    collision_map[(gx, gy)] = {
-                        "char": char,
-                        "tid": tid,
-                        "name": TILE_NAMES.get(char, "Unknown"),
-                        "walkable": walkable
-                    }
 
-                    row_chars.append(f"{char:2}")
-                grid_rows.append(row_label + " ".join(row_chars))
-            
-            return {
-                "grid_str": "\n".join(grid_rows),
-                "objects": found_objects,
-                "collision": collision_map
-            }
-        except Exception as e:
-            return {
-                "grid_str": f"Error reading grid: {e}\n(Player at {px}, {py})",
-                "objects": [],
-                "collision": {}
-            }
 
-    def _cache_collision_map(self, px, py, collision_map):
-        self._collision_cache = collision_map
-        self._last_scan_origin = (px, py)
-
-    def _refresh_collision_cache(self):
-        """
-        Re-scan the current screen and refresh the cached collision data
-        so navigation helpers can rely on up-to-date walkability info.
-        """
-        px, py = self.emulator.get_player_position()
-        grid_data = self._scanner_local_grid_data(px, py)
-        self._cache_collision_map(px, py, grid_data["collision"])
-        self._remember_collision_map(self.emulator.get_map_id(), grid_data["collision"])
-
-    def _get_collision_tile(self, pos):
-        return self._collision_cache.get(pos)
 
     def _get_memory_bucket(self, map_id):
         bucket = self._world_memory.get(map_id)
@@ -302,20 +184,11 @@ class Navigation:
         bucket = self._get_memory_bucket(map_id)
         return list(bucket["warps"].values())
 
-    def _char_is_walkable(self, char):
-        if not char:
-            return True
-        if char in WALKABLE_CHARS:
-            return True
-        if char in {".."}:
-            return True
-        if isinstance(char, str) and char.startswith("ID:"):
-            return True
-        return False
+
 
     def _is_tile_walkable(self, pos):
-        """Checks walkability using the definitive collision map data from the emulator."""
-        return self.emulator.is_walkable(pos[0], pos[1])
+        """Checks walkability using the definitive collision map data from the CollisionGrid instance."""
+        return self.collision.is_walkable(pos[0], pos[1])
 
     def _adjacent_walkable_positions(self, target_x, target_y):
         adjacents = [
@@ -460,6 +333,7 @@ class Navigation:
                 
             for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
                 neighbor = (current[0] + dx, current[1] + dy)
+                is_walkable = self._is_tile_walkable(neighbor)
                 
                 # COLLISION CHECKS
                 if neighbor in known_walls:
@@ -472,7 +346,7 @@ class Navigation:
                 if neighbor in warp_positions and neighbor != target_pos:
                     continue
 
-                if not self._is_tile_walkable(neighbor) and neighbor != target_pos:
+                if not is_walkable and neighbor != target_pos:
                     continue
 
                 tentative_g_score = g_score[current] + 1
@@ -513,43 +387,7 @@ class Navigation:
             current = step
         return directions
 
-    def _find_path_in_memory(self, map_id, start_pos, target_pos, max_nodes=2000):
-        bucket = self._get_memory_bucket(map_id)
-        tiles = bucket["tiles"]
-        if target_pos not in tiles:
-            return None
-
-        if start_pos == target_pos:
-            return []
-
-        queue = deque([start_pos])
-        came_from = {start_pos: None}
-        nodes_explored = 0
-
-        while queue and nodes_explored < max_nodes:
-            nodes_explored += 1
-            current = queue.popleft()
-            if current == target_pos:
-                break
-            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                neighbor = (current[0] + dx, current[1] + dy)
-                if neighbor in came_from:
-                    continue
-                tile = tiles.get(neighbor)
-                if tile is None and neighbor != target_pos:
-                    continue
-                if neighbor != target_pos and not tile.get("walkable", False):
-                    continue
-                came_from[neighbor] = current
-                queue.append(neighbor)
-
-        if target_pos not in came_from:
-            return None
-
-        return self._reconstruct_path(came_from, target_pos)
-
     def find_path_to(self, target_x, target_y, use_memory=False, max_nodes=1000):
-        self._refresh_collision_cache()
         map_id = self.emulator.get_map_id()
         current_x, current_y = self.emulator.get_player_position()
         start_pos = (current_x, current_y)

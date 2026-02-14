@@ -1,4 +1,5 @@
 from src.emulator import PokemonEmulator
+from src.constants import MAP_WIDTH_ADDR
 
 # Memory address for the start of the collision data map.
 # This value is based on community-documented resources for Pokémon Blue.
@@ -23,7 +24,7 @@ class CollisionGrid:
         
         # Get the dimensions of the current map from memory.
         # These are typically stored right before the map data itself.
-        map_width = self.emulator.read_ram(0xD35D)
+        map_width = self.emulator.read_ram(MAP_WIDTH_ADDR)
         
         grid = {}
         for y in range(player_y - radius, player_y + radius + 1):
@@ -39,7 +40,7 @@ class CollisionGrid:
                 collision_byte = self.emulator.read_ram(collision_addr)
                 
                 # This is a common pattern in Gen 1 games.
-                is_walkable = collision_byte == 0x00
+                is_walkable = collision_byte == 0x00 or collision_byte == 0x11
                 grid[f"{x},{y}"] = is_walkable
                 
         return {
@@ -51,8 +52,8 @@ class CollisionGrid:
 
     def is_walkable(self, x, y):
         """Checks if a single specific tile is walkable."""
-        map_width = self.emulator.read_ram(0xD35D)
+        map_width = self.emulator.read_ram(MAP_WIDTH_ADDR)
         offset = y * map_width + x
         collision_addr = COLLISION_MAP_START_ADDR + offset
         collision_byte = self.emulator.read_ram(collision_addr)
-        return collision_byte == 0x00
+        return collision_byte == 0x00 or collision_byte == 0x11

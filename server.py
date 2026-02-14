@@ -352,7 +352,7 @@ async def walk_to_with_path_check(x: int, y: int, max_steps: int = 100) -> str:
 
 
 def init_emulator(rom_path):
-    global emulator, navigation, battle, game_state, vision
+    global emulator, navigation, battle, game_state, vision, collision
     if not os.path.exists(rom_path):
          raise FileNotFoundError(f"ROM file not found at {os.path.abspath(rom_path)}")
     
@@ -361,7 +361,7 @@ def init_emulator(rom_path):
     
     emulator = PokemonEmulator(rom_path, headless=headless_env)
     battle = Battle(emulator)
-    navigation = Navigation(emulator, battle)
+    navigation = Navigation(emulator, collision, battle)
     game_state = GameState(emulator)
     vision = VisionSystem()
     collision = CollisionGrid(emulator)
