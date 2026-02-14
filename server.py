@@ -327,6 +327,15 @@ async def read_ram_region(start_address: int, length: int) -> str:
     return run_on_main("read_ram_region", start_address, length)
 
 @mcp.tool()
+async def debug_inspect_tile(x: int, y: int) -> str:
+    """
+    DEBUG: Inspect the raw collision byte at map coordinates (x, y).
+    Returns the byte value, RAM address, and walkability status.
+    Use this to learn which tile IDs are walkable vs blocked.
+    """
+    return run_on_main("read_map_memory", x, y)
+
+@mcp.tool()
 async def press_buttons(sequence: str) -> str:
     """
     Presses a sequence of buttons separated by commas.
@@ -420,6 +429,8 @@ def process_command(func_name, args, kwargs):
             return True, json.dumps(game_state.read_journal())
         elif func_name == "read_ram_region":
             return True, str(emulator.read_ram_region(*args, **kwargs))
+        elif func_name == "read_map_memory":
+            return True, json.dumps(emulator.read_map_memory(*args, **kwargs))
         elif func_name == "write_journal_entry":
             result = game_state.write_journal_entry(*args, **kwargs)
             return True, result

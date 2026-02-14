@@ -1,10 +1,5 @@
 from src.emulator import PokemonEmulator
-from src.constants import MAP_WIDTH_ADDR
-
-# Memory address for the start of the collision data map.
-# This value is based on community-documented resources for Pokémon Blue.
-# It points to the top-left corner of the currently loaded map's collision grid.
-COLLISION_MAP_START_ADDR = 0xC4A0
+from src.constants import MAP_WIDTH_ADDR, COLLISION_MAP_START_ADDR
 
 class CollisionGrid:
     """

@@ -9,6 +9,9 @@ PARTY_COUNT_ADDR = 0xD163
 NAMING_SCREEN_ADDR = 0xD116 # 0 = Normal, 1 = Player, 2 = Rival
 MENU_STATE_ADDR = 0xD05C    # Non-zero when a menu is open
 
+# Collision Map
+COLLISION_MAP_START_ADDR = 0xC4A0  # Start of the collision data for the current map
+
 # Hardware Registers
 LCDC_ADDR = 0xFF40    # LCD Control
 SCY_ADDR = 0xFF42     # Scroll Y

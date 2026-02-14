@@ -342,6 +342,23 @@ class PokemonEmulator:
             # If we read out of bounds or another error occurs, default to not walkable for safety.
             return False
 
+    def read_map_memory(self, x, y):
+        """Read the raw collision byte at map coordinates (x, y).
+        Returns a dict with the byte value, RAM address, and walkability status.
+        """
+        map_width = self.read_ram(MAP_WIDTH_ADDR)
+        offset = y * map_width + x
+        collision_addr = COLLISION_MAP_START_ADDR + offset
+        collision_byte = self.read_ram(collision_addr)
+        return {
+            "x": x,
+            "y": y,
+            "collision_byte": f"0x{collision_byte:02X}",
+            "collision_byte_int": collision_byte,
+            "ram_address": f"0x{collision_addr:04X}",
+            "is_walkable": collision_byte == 0x00 or collision_byte == 0x11,
+        }
+
     def get_background_tiles(self):
         """
         Returns a 20x18 matrix of tile IDs from the Background layer.
