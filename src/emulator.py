@@ -276,11 +276,21 @@ class PokemonEmulator:
 
             if (start_x, start_y) == (end_x, end_y):
                 # Blocked logic
-                if total_steps == 0:
-                     # Identify blocker on first fail
-                     try:
+                try:
+                    target_x, target_y = start_x, start_y
+                    if direction == "up": target_y -= 1
+                    elif direction == "down": target_y += 1
+                    elif direction == "left": target_x -= 1
+                    elif direction == "right": target_x += 1
+                    
+                    mem_data = self.read_map_memory(target_x, target_y)
+                    byte = mem_data["collision_byte"]
+                    
+                    if self.is_npc_at(target_x, target_y):
+                        reason = f"blocked by NPC at ({target_x}, {target_y})"
+                    else:
                         tiles = self.get_screen_tile_ids()
-                        tx, ty = 10, 9 # Player center
+                        tx, ty = 10, 9
                         if direction == "up": ty -= 1
                         elif direction == "down": ty += 1
                         elif direction == "left": tx -= 1
@@ -289,11 +299,18 @@ class PokemonEmulator:
                         tid = tiles[tx][ty] & 0xFF
                         char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
                         if tid == 0x7F:
-                            return "blocked by Invisible Wall / Exit Mat"
-                        return f"blocked by {char}"
-                     except:
-                        return "blocked"
-                return f"blocked after {total_steps} steps"
+                            reason = f"blocked by Invisible Wall / Exit Mat (collision_byte={byte})"
+                        else:
+                            reason = f"blocked by {char} (collision_byte={byte})"
+                    
+                    if total_steps == 0:
+                        return reason
+                    else:
+                        return f"{reason} after {total_steps} steps"
+                except Exception as e:
+                    if total_steps == 0:
+                        return f"blocked (error identifying: {e})"
+                    return f"blocked after {total_steps} steps (error identifying: {e})"
             
             total_steps += 1
             # Brief pause between steps for stability
@@ -327,6 +344,26 @@ class PokemonEmulator:
         with open(filepath, "rb") as f:
             self.pyboy.load_state(f)
         return f"Game state loaded from {filepath}"
+
+    def is_npc_at(self, x, y):
+        """
+        Checks if an NPC is currently at the target map coordinates.
+        Gen 1 Sprite Data ($C100-$C1FF):
+        - 16 bytes per sprite.
+        - Byte 4: Y Map Coord (offset by 4)
+        - Byte 6: X Map Coord (offset by 4)
+        """
+        for slot in range(1, 16): # Slot 0 is Player
+            base = 0xC100 + (slot * 16)
+            if self.read_ram(base) == 0: continue # Inactive
+            
+            # Map coordinates are stored offset by 4
+            sprite_y = self.read_ram(base + 4) - 4
+            sprite_x = self.read_ram(base + 6) - 4
+            
+            if sprite_x == x and sprite_y == y:
+                return True
+        return False
 
     def is_walkable(self, x, y):
         """Checks if a specific tile is walkable based on the true collision map data."""
