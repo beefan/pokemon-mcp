@@ -361,7 +361,34 @@ class PokemonEmulator:
             "note": "Value is a Block ID. Checked against WALKABLE_BLOCK_IDS."
         }
 
-    def get_background_tiles(self):
+        return {
+            "x": x,
+            "y": y,
+            "collision_byte": f"0x{collision_byte:02X}",
+            "collision_byte_int": collision_byte,
+            "ram_address": f"0x{collision_addr:04X}",
+            "is_walkable": collision_byte in WALKABLE_BLOCK_IDS,
+            "note": "Value is a Block ID. Checked against WALKABLE_BLOCK_IDS."
+        }
+    
+    def scan_map_area(self, center_x, center_y, radius=5):
+        """
+        Scans a square area of the map around the given center coordinates.
+        Returns a 2D grid/list of collision data.
+        """
+        grid = []
+        # Ensure we don't scan off the map negative coordinates (though address math might handle it weirdly)
+        # Gen 1 maps can be large, so simple bounds check is hard without map_height. 
+        # We'll just run it and let read_map_memory handle the math.
+        
+        for y in range(center_y - radius, center_y + radius + 1):
+            row = []
+            for x in range(center_x - radius, center_x + radius + 1):
+                data = self.read_map_memory(x, y)
+                row.append(data)
+            grid.append(row)
+            
+        return grid
         """
         Returns a 20x18 matrix of tile IDs from the Background layer.
         Accounts for Scroll X (SCX) and Scroll Y (SCY).
