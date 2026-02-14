@@ -729,15 +729,18 @@ class Navigation:
         """
         Interacts with an object at (target_x, target_y).
         Logic: Find adjacent tile -> walk_to it -> Face target -> Press A.
-        Returns: "interaction_success", "walk_failed", or "no_accessible_path"
+        Returns rich feedback on what happened.
         """
         if self.emulator.is_dialogue_active():
             return "dialogue_active: dialogue or menu is active. Clear the screen before interacting."
         
-        current_x, current_y = self.emulator.get_player_position()
+        # 1. State Tracking: Map current state
+        pre_map = self.emulator.get_map_id()
+        pre_x, pre_y = self.emulator.get_player_position()
+        
         self._refresh_collision_cache()
         
-        # 1. Find all adjacent walkable tiles near the target
+        # 2. Find all adjacent walkable tiles near the target
         adjacents = self._adjacent_walkable_positions(target_x, target_y)
         if not adjacents:
             # Provide diagnostic detail to help tune collision rules.
@@ -753,46 +756,53 @@ class Navigation:
                     neighbor_debug.append(f"{pos}:unknown (not in cache)")
             return "no_accessible_path: no walkable tile next to target; neighbors=" + ", ".join(neighbor_debug)
 
-        current_pos = (current_x, current_y)
-        player_direction = self._direction_to_target(current_pos, (target_x, target_y))
-        if player_direction:
-            btn_map = {
-                "up": BUTTON_UP,
-                "down": BUTTON_DOWN,
-                "left": BUTTON_LEFT,
-                "right": BUTTON_RIGHT
-            }
-            self.emulator.input(btn_map[player_direction], hold_frames=2)
-            self.emulator.tick(2)
-            self.emulator.input(BUTTON_A, hold_frames=5)
-            self.emulator.tick(5)
-            return "interaction_success"
+        # 3. Sort by distance from player
+        adjacents.sort(key=lambda p: abs(p[0]-pre_x) + abs(p[1]-pre_y))
 
-        # 2. Sort by distance from player
-        adjacents.sort(key=lambda p: abs(p[0]-current_x) + abs(p[1]-current_y))
-
-        # 3. Try walking to each
+        # 4. Try walking to each
         last_walk_error = None
         for ax, ay, face_dir in adjacents:
-            # Check if tile itself is walkable (simplified)
-            # Find path to see if accessible
-            path = self.find_path((current_x, current_y), (ax, ay))
-            if path is not None:
+            if (pre_x, pre_y) == (ax, ay):
+                res = "arrived"
+            else:
                 res = self.walk_to(ax, ay, max_steps=40)
-                if res == "arrived":
-                    # 4. Face target and press A
-                    btn_map = {
-                        "up": BUTTON_UP,
-                        "down": BUTTON_DOWN,
-                        "left": BUTTON_LEFT,
-                        "right": BUTTON_RIGHT
-                    }
-                    self.emulator.input(btn_map[face_dir], hold_frames=2)
-                    self.emulator.tick(2)
-                    self.emulator.input(BUTTON_A, hold_frames=5)
-                    self.emulator.tick(5)
-                    return "interaction_success"
-                last_walk_error = res
+            
+            if res == "arrived":
+                # 5. Face target and press A
+                btn_map = {
+                    "up": BUTTON_UP,
+                    "down": BUTTON_DOWN,
+                    "left": BUTTON_LEFT,
+                    "right": BUTTON_RIGHT
+                }
+                self.emulator.input(btn_map[face_dir], hold_frames=2)
+                self.emulator.tick(2)
+                self.emulator.input(BUTTON_A, hold_frames=5)
+                self.emulator.tick(10) # Wait for animation/transition
+                
+                # 6. Analyze Result
+                post_map = self.emulator.get_map_id()
+                post_x, post_y = self.emulator.get_player_position()
+                dialogue_active = self.emulator.is_dialogue_active()
+                
+                if post_map != pre_map:
+                    return f"interaction_success: map_changed to {post_map}"
+                if dialogue_active:
+                    return "interaction_success: dialogue_started"
+                if (post_x != ax or post_y != ay):
+                    return f"interaction_success: position_changed to ({post_x}, {post_y})"
+                
+                # If no state change, check if it's a known step-on warp
+                target_tile = self._get_collision_tile((target_x, target_y))
+                if target_tile:
+                    char = target_tile.get("char")
+                    if char in (">", "S"):
+                        warp_type = "door" if char == ">" else "stairs"
+                        return f"interaction_failed: no state change. This is a {warp_type} (step-on warp). Use walk_to({target_x}, {target_y}) instead of interact_with."
+                
+                return "interaction_success: but no obvious state change detected."
+                
+            last_walk_error = res
         
         if last_walk_error:
             return f"no_accessible_path: could not reach a tile adjacent to the target. last_walk={last_walk_error}"
