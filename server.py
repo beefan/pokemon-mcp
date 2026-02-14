@@ -342,7 +342,7 @@ async def visual_guided_step(direction: str) -> str:
     Use this when you suspect the collision map is wrong (e.g. fake walls).
     Returns: "Moved successfully", "Blocked", or "Visual change detected".
     """
-    success, result = run_on_main("visual_guided_step", direction)
+    result = run_on_main("visual_guided_step", direction)
     return result
 
 @mcp.tool()
@@ -386,11 +386,8 @@ async def add_walkable_collision_byte(byte_hex: str) -> str:
     except ValueError:
         return f"Error: Invalid hex string '{byte_hex}'"
 
-    success, message = run_on_main("add_walkable_byte", collision_byte)
-    if success:
-        return f"Successfully added {hex(collision_byte)} to walkable whitelist."
-    else:
-        return f"Error adding byte: {message}"
+    result = run_on_main("add_walkable_byte", collision_byte)
+    return f"Successfully added {hex(collision_byte)} to walkable whitelist. Result: {result}"
 
 @mcp.tool()
 async def press_buttons(sequence: str) -> str:
