@@ -10,6 +10,13 @@ DIRECTION_TO_BUTTON = {
     "left": BUTTON_LEFT,
     "right": BUTTON_RIGHT
 }
+
+DIRECTION_TO_BITMASK = {
+    "up": DIR_UP,
+    "down": DIR_DOWN,
+    "left": DIR_LEFT,
+    "right": DIR_RIGHT
+}
 class Navigation:
     def __init__(self, emulator: PokemonEmulator, collision_grid, battle_engine=None):
         self.emulator = emulator
@@ -207,9 +214,12 @@ class Navigation:
 
 
 
-    def _is_tile_walkable(self, pos):
+    def _is_tile_walkable(self, pos, from_dir=None):
         """Checks walkability using the definitive collision map data from the CollisionGrid instance."""
-        return self.collision.is_walkable(pos[0], pos[1])
+        mask = None
+        if from_dir:
+            mask = DIRECTION_TO_BITMASK.get(from_dir)
+        return self.collision.is_walkable(pos[0], pos[1], from_direction=mask)
 
     def _adjacent_walkable_positions(self, target_x, target_y):
         adjacents = [
@@ -352,9 +362,9 @@ class Navigation:
             if current == target_pos:
                 return self._reconstruct_path(came_from, current)
                 
-            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            for dx, dy, dname in [(0, 1, "down"), (0, -1, "up"), (1, 0, "right"), (-1, 0, "left")]:
                 neighbor = (current[0] + dx, current[1] + dy)
-                is_walkable = self._is_tile_walkable(neighbor)
+                is_walkable = self._is_tile_walkable(neighbor, from_dir=dname)
                 
                 # COLLISION CHECKS
                 if neighbor in known_walls:

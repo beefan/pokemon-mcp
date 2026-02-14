@@ -12,18 +12,29 @@ MENU_STATE_ADDR = 0xD05C    # Non-zero when a menu is open
 # Collision Map
 COLLISION_MAP_START_ADDR = 0xC6E8  # wOverworldMap: Stores 2x2 block IDs. Formula: (y+3)*(width+6)+(x+3).
 
+# Direction Bitmasks (Allowed Exit Directions)
+DIR_UP    = 1
+DIR_DOWN  = 2
+DIR_LEFT  = 4
+DIR_RIGHT = 8
+DIR_ALL   = 15
+
 # Valid Walkable Block IDs (Derived from wOverworldMap)
-# 0x03: Floor (Observed)
-# 0x00: Generic/Cuttable? (Legacy check)
-# 0x11: Floor? (Legacy check)
+# Mapping: BlockID -> Bitmask of allowed exit directions.
+# For standard floors, all directions are allowed.
 WALKABLE_BLOCK_IDS = {
-    0x00, # Standard Floor
-    0x03, # Pallet Town Floor (Observed)
-    0x11, # Status Check (Legacy)
-    0x0C, # Grass (Standard Gen 1)
-    0x0A, # Warps/Doors (Often 0x0B or 0x0C too, needs verification)
-    0x05, # Oak's Lab Floor/Mat (Observed)
-    0x04, # Oak's Lab Carpet/Warp (Observed)
+    0x00: DIR_ALL, # Standard Floor
+    0x03: DIR_ALL, # Pallet Town Floor
+    0x11: DIR_ALL, # Status Check (Legacy)
+    0x0C: DIR_ALL, # Grass
+    0x0A: DIR_ALL, # Warps/Doors
+    0x05: DIR_ALL, # Oak's Lab Floor/Mat
+    0x04: DIR_ALL, # Oak's Lab Carpet/Warp
+    
+    # Directional Constraints (Ledges)
+    0x36: DIR_DOWN, # South Ledge
+    0x35: DIR_LEFT, # Left Ledge (Approximate, needs verification)
+    0x37: DIR_RIGHT,# Right Ledge (Approximate, needs verification)
 }
 
 # Hardware Registers
