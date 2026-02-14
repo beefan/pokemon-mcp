@@ -13,6 +13,7 @@
 | **PKM-9** | [STATE-001] Implement get_game_state_flags | To Do | Read story progress from RAM. |
 | **PKM-10** | [UX-001] Advanced Dialogue Handling | To Do | Handle Yes/No prompts better. |
 | **PKM-11** | [TECH-001] Tech Debt & Stability | To Do | Code cleanup and stability fixes. |
+| **PKM-12** | [NAV-005] Pathfinder Directional Constraints | To Do | Handle one-way tiles like ledges. |
 
 ## Detailed Descriptions
 
@@ -45,3 +46,7 @@
 
 ### PKM-11: [TECH-001] Tech Debt & Stability
 - **Goal**: General code cleanup, refactoring, and stability improvements.
+
+### PKM-12: [NAV-005] Pathfinder Directional Constraints
+- **Goal**: Handle one-way tiles like ledges and treadmills in the pathfinder.
+- **Implementation**: Update `is_walkable` to accept a `from_direction` and check directional bitmasks.
