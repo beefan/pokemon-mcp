@@ -336,6 +336,16 @@ async def debug_inspect_tile(x: int, y: int) -> str:
     return run_on_main("read_map_memory", x, y)
 
 @mcp.tool()
+async def visual_guided_step(direction: str) -> str:
+    """
+    Attempts to move in a direction, verifying success via visual feedback.
+    Use this when you suspect the collision map is wrong (e.g. fake walls).
+    Returns: "Moved successfully", "Blocked", or "Visual change detected".
+    """
+    success, result = run_on_main("visual_guided_step", direction)
+    return result
+
+@mcp.tool()
 async def scan_surroundings(radius: int = 5) -> str:
     """
     Survey the map area around the player to identify collision block IDs.
@@ -469,6 +479,8 @@ def process_command(func_name, args, kwargs):
         elif func_name == "move_direction":
             result = str(emulator.move_direction(*args, **kwargs))
             return True, result
+        elif func_name == "visual_guided_step":
+            return True, navigation.visual_guided_step(args[0])
         elif func_name == "walk_to":
             return True, navigation.walk_to(*args, **kwargs)
         elif func_name == "walk_to_with_path_check":

@@ -508,6 +508,42 @@ class Navigation:
         nearby_str = f" [Nearby: {', '.join(set(nearby))}]" if nearby else ""
         return f"Map ID: {map_id}, Position: ({x}, {y}){nearby_str}"
 
+    def visual_guided_step(self, direction: str) -> str:
+        """
+        Attempts to move in a direction, verifying success via visual and coordinate feedback.
+        Returns a descriptive result string.
+        """
+        if direction not in ["up", "down", "left", "right"]:
+            return f"Invalid direction: {direction}"
+            
+        # 1. Capture Pre-Move State
+        start_x, start_y = self.emulator.get_player_position()
+        # We use the raw screen image bytes as a simple hash/signature
+        start_img = self.emulator.screen_image()
+        import hashlib
+        start_hash = hashlib.md5(start_img.tobytes()).hexdigest()
+        
+        # 2. Execute Move (Blindly)
+        self.emulator.move_direction(direction)
+        
+        # 3. Capture Post-Move State
+        end_x, end_y = self.emulator.get_player_position()
+        end_img = self.emulator.screen_image()
+        end_hash = hashlib.md5(end_img.tobytes()).hexdigest()
+        
+        # 4. Analyze Result
+        pos_changed = (start_x != end_x) or (start_y != end_y)
+        visual_changed = (start_hash != end_hash)
+        
+        if pos_changed:
+            return f"Moved successfully to ({end_x}, {end_y})"
+        elif visual_changed:
+            # Position same, but screen changed. 
+            # Could be a treadmill, a bump animation, or a warp that kept coords same (rare).
+            return "Visual change detected, but position unchanged (Blocked or Treadmill?)"
+        else:
+            return "Blocked (No visual or position change)"
+
     def walk_to(self, target_x, target_y, on_battle="interrupt", avoid_positions=None, max_steps=100):
         """
         Navigate to target coordinates.
