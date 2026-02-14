@@ -336,6 +336,33 @@ async def debug_inspect_tile(x: int, y: int) -> str:
     return run_on_main("read_map_memory", x, y)
 
 @mcp.tool()
+async def scan_surroundings(radius: int = 5) -> str:
+    """
+    Survey the map area around the player to identify collision block IDs.
+    Returns a grid of collision bytes.
+    Use this to map:
+    - Grass
+    - Water
+    - Ledges
+    - Paths
+    """
+    x, y = run_on_main("get_player_position")
+    grid_data = run_on_main("scan_map_area", x, y, radius)
+    
+    # Format the output as a readable ASCII grid for the LLM
+    output_lines = [f"Scanning radius {radius} around ({x}, {y}):\n"]
+    
+    for row in grid_data:
+        line_chars = []
+        for cell in row:
+            byte_val = cell["collision_byte"] # e.g. "0x03"
+            # visual helper: [03]
+            line_chars.append(f"[{byte_val[2:]}]")
+        output_lines.append(" ".join(line_chars))
+        
+    return "\n".join(output_lines)
+
+@mcp.tool()
 async def press_buttons(sequence: str) -> str:
     """
     Presses a sequence of buttons separated by commas.
@@ -360,6 +387,8 @@ async def walk_to_with_path_check(x: int, y: int, max_steps: int = 100) -> str:
     return result
 
 
+
+
 def init_emulator(rom_path):
     global emulator, navigation, battle, game_state, vision, collision
     if not os.path.exists(rom_path):
@@ -370,10 +399,10 @@ def init_emulator(rom_path):
     
     emulator = PokemonEmulator(rom_path, headless=headless_env)
     battle = Battle(emulator)
+    collision = CollisionGrid(emulator)
     navigation = Navigation(emulator, collision, battle)
     game_state = GameState(emulator)
     vision = VisionSystem()
-    collision = CollisionGrid(emulator)
 
 def process_command(func_name, args, kwargs):
     """Executes a command using the global instances (Called on Main Thread)."""
@@ -412,6 +441,8 @@ def process_command(func_name, args, kwargs):
             return True, json.dumps(navigation.find_path_to_nearest_warp(*args, **kwargs))
         elif func_name == "get_player_status":
             return True, str(navigation.get_player_status())
+        elif func_name == "get_player_position":
+            return True, emulator.get_player_position()
         elif func_name == "move_direction":
             result = str(emulator.move_direction(*args, **kwargs))
             return True, result
@@ -431,6 +462,8 @@ def process_command(func_name, args, kwargs):
             return True, str(emulator.read_ram_region(*args, **kwargs))
         elif func_name == "read_map_memory":
             return True, json.dumps(emulator.read_map_memory(*args, **kwargs))
+        elif func_name == "scan_map_area":
+            return True, emulator.scan_map_area(*args, **kwargs)
         elif func_name == "write_journal_entry":
             result = game_state.write_journal_entry(*args, **kwargs)
             return True, result

@@ -16,7 +16,15 @@ COLLISION_MAP_START_ADDR = 0xC6E8  # wOverworldMap: Stores 2x2 block IDs. Formul
 # 0x03: Floor (Observed)
 # 0x00: Generic/Cuttable? (Legacy check)
 # 0x11: Floor? (Legacy check)
-WALKABLE_BLOCK_IDS = {0x00, 0x03, 0x11}
+WALKABLE_BLOCK_IDS = {
+    0x00, # Standard Floor
+    0x03, # Pallet Town Floor (Observed)
+    0x11, # Status Check (Legacy)
+    0x0C, # Grass (Standard Gen 1)
+    0x0A, # Warps/Doors (Often 0x0B or 0x0C too, needs verification)
+    0x05, # Oak's Lab Floor/Mat (Observed)
+    0x04, # Oak's Lab Carpet/Warp (Observed)
+}
 
 # Hardware Registers
 LCDC_ADDR = 0xFF40    # LCD Control
