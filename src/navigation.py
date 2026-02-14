@@ -1,4 +1,5 @@
 import heapq
+import random
 from collections import deque
 from src.emulator import PokemonEmulator
 from src.constants import *
@@ -592,8 +593,31 @@ class Navigation:
                 if (recent_positions[-1] == recent_positions[-3] and
                     recent_positions[-2] == recent_positions[-4]):
                     # Oscillation detected, avoid current tile to force re-path
+                    # Oscillation detected, avoid current tile to force re-path
                     avoid_set.add(current_pos)
                     last_debug = f"oscillation_detected at {current_pos}, avoiding tile"
+
+                    # OSCILLATION BREAKER: Take a random valid step to break the rhythm
+                    # This helps when we are stuck in a logical loop (A -> B -> A)
+                    adjacents = self._adjacent_walkable_positions(current_x, current_y)
+                    if adjacents:
+                         # Pick a random neighbor that isn't the one we just came from (if possible)
+                         # adjacents list is [(x, y, dir), ...]
+                         random.shuffle(adjacents)
+                         for ax, ay, adir in adjacents:
+                             # Don't step back into the exact tile we came from if we can avoid it
+                             if (ax, ay) == recent_positions[-2]:
+                                 continue
+                             
+                             # Execute the random step
+                             btn = DIRECTION_TO_BUTTON.get(adir)
+                             if btn:
+                                 self.emulator.input(btn, hold_frames=5)
+                                 self.emulator.tick(5)
+                                 steps_taken += 1
+                                 recent_positions.clear() # Reset history
+                                 last_debug = f"oscillation_broken: random step {adir}"
+                                 break
                     continue
 
             distance = abs(current_x - path_target[0]) + abs(current_y - path_target[1])
