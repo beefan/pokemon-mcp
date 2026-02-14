@@ -5,8 +5,8 @@
 | **PKM-1** | [OPS-001] Create debug_inspect_tile Tool | Done | Debug tool for inspecting tiles. |
 | **PKM-2** | [OPS-002] Create CollisionSurveyor Script | Done | Map Pallet Town's collision data. |
 | **PKM-3** | [CORE-001] Refactor CollisionGrid for Dynamic Whitelists | To Do | Stop assuming 0x00 is the only walkable tile. |
-| **PKM-4** | [NAV-001] Implement visual_guided_step | To Do | Tool that moves blindly but verifies visually. |
-| **PKM-5** | [NAV-002] Oscillation Breaker in walk_to | To Do | Prevent infinite left-right loops. |
+| **PKM-4** | [NAV-001] Implement visual_guided_step | Done | Tool that moves blindly but verifies visually. |
+| **PKM-5** | [NAV-002] Oscillation Breaker in walk_to | Done | Prevent infinite left-right loops. |
 | **PKM-6** | [NAV-003] Enrich move_direction Feedback | To Do | Tell the agent *why* it was blocked. |
 | **PKM-7** | [NAV-004] Fix interact_with Feedback | To Do | Distinguish "Face & Press A" from "Step-On" warps. |
 | **PKM-8** | [CORE-002] Bump-and-Learn Session Cache | To Do | Runtime collision learning. |

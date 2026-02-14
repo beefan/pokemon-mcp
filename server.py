@@ -205,10 +205,20 @@ async def find_path_to_nearest_warp(use_memory: bool = True, max_nodes: int = 20
     """
     return run_on_main("find_path_to_nearest_warp", use_memory, max_nodes)
 
-# @mcp.tool()
-# async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
-#     """DEPRECATED: Use move_direction sequences based on vision."""
-#     return run_on_main("walk_to", x, y, on_battle, avoid_positions)
+@mcp.tool()
+async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions: list = None) -> str:
+    """
+    PRIMARY NAVIGATION: Moves the player to a coordinate within the current map.
+    Handles obstacle avoidance, warps, and battles.
+    
+    Args:
+        x, y: Target coordinates.
+        on_battle: Strategy when a battle starts:
+            - "interrupt": (Default) Stop and return control.
+            - "run": Attempt to escape and continue.
+            - "spam_attack": Fight blindly until won.
+    """
+    return run_on_main("walk_to", x, y, on_battle, avoid_positions)
 
 @mcp.tool()
 async def interact_with(x: int, y: int) -> str:
@@ -401,21 +411,6 @@ async def press_buttons(sequence: str) -> str:
         _auto_checkpoint("buttons", sequence)
     return result
 
-@mcp.tool()
-async def walk_to_with_path_check(x: int, y: int, max_steps: int = 100) -> str:
-    """
-    PRIMARY NAVIGATION: Moves the player to a target, intelligently navigating around unexpected obstacles.
-    This tool learns from collisions and recalculates the path.
-    Returns: 'arrived', 'blocked', or 'max_steps_reached'.
-    """
-    result = run_on_main("walk_to_with_path_check", x, y, max_steps)
-    if AUTO_CHECKPOINT_ENABLED and result == "arrived":
-        _auto_checkpoint("walk_to_with_path_check", f"target=({x},{y}) result={result}")
-    return result
-
-
-
-
 def init_emulator(rom_path):
     global emulator, navigation, battle, game_state, vision, collision
     if not os.path.exists(rom_path):
@@ -480,8 +475,6 @@ def process_command(func_name, args, kwargs):
             return True, navigation.visual_guided_step(args[0])
         elif func_name == "walk_to":
             return True, navigation.walk_to(*args, **kwargs)
-        elif func_name == "walk_to_with_path_check":
-            return True, navigation.walk_to_with_path_check(*args, **kwargs)
         elif func_name == "interact_with":
             return True, navigation.interact_with(*args, **kwargs)
         elif func_name == "execute_battle_turn":
