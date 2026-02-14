@@ -389,6 +389,8 @@ class PokemonEmulator:
             grid.append(row)
             
         return grid
+    
+    def get_background_tiles(self):
         """
         Returns a 20x18 matrix of tile IDs from the Background layer.
         Accounts for Scroll X (SCX) and Scroll Y (SCY).

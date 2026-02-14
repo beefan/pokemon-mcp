@@ -399,10 +399,10 @@ def init_emulator(rom_path):
     
     emulator = PokemonEmulator(rom_path, headless=headless_env)
     battle = Battle(emulator)
+    collision = CollisionGrid(emulator)
     navigation = Navigation(emulator, collision, battle)
     game_state = GameState(emulator)
     vision = VisionSystem()
-    collision = CollisionGrid(emulator)
 
 def process_command(func_name, args, kwargs):
     """Executes a command using the global instances (Called on Main Thread)."""

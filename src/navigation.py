@@ -14,6 +14,26 @@ class Navigation:
         self.emulator = emulator
         self.battle_engine = battle_engine
         self.collision = collision_grid
+        self._world_memory = {}
+
+    def _refresh_collision_cache(self):
+        """Clears the internal collision cache if the collision grid supports it."""
+        if hasattr(self.collision, "clear_cache"):
+            self.collision.clear_cache()
+
+    def _get_collision_tile(self, pos):
+        """Returns tile metadata from the collision grid at the given position."""
+        x, y = pos
+        # Collision grid usually has a method to get tile info
+        if hasattr(self.collision, "get_tile_info"):
+            return self.collision.get_tile_info(x, y)
+        
+        # Fallback to a basic check if method is missing
+        return {
+            "tid": None,
+            "char": None,
+            "walkable": self.collision.is_walkable(x, y)
+        }
 
     def get_local_grid(self, radius=2):
         """
