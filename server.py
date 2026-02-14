@@ -363,6 +363,26 @@ async def scan_surroundings(radius: int = 5) -> str:
     return "\n".join(output_lines)
 
 @mcp.tool()
+async def add_walkable_collision_byte(byte_hex: str) -> str:
+    """
+    Manually add a block ID to the walkable whitelist for this session.
+    Use this if you find a tile that should be walkable but is marked blocked.
+    Args:
+        byte_hex: Hex string of the byte, e.g. "0x0C" or "0c"
+    """
+    # Parse hex string
+    try:
+        collision_byte = int(byte_hex, 16)
+    except ValueError:
+        return f"Error: Invalid hex string '{byte_hex}'"
+
+    success, message = run_on_main("add_walkable_byte", collision_byte)
+    if success:
+        return f"Successfully added {hex(collision_byte)} to walkable whitelist."
+    else:
+        return f"Error adding byte: {message}"
+
+@mcp.tool()
 async def press_buttons(sequence: str) -> str:
     """
     Presses a sequence of buttons separated by commas.
@@ -443,6 +463,9 @@ def process_command(func_name, args, kwargs):
             return True, str(navigation.get_player_status())
         elif func_name == "get_player_position":
             return True, emulator.get_player_position()
+        elif func_name == "add_walkable_byte":
+            collision.add_walkable_byte(args[0])
+            return True, "Added"
         elif func_name == "move_direction":
             result = str(emulator.move_direction(*args, **kwargs))
             return True, result

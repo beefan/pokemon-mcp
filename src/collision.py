@@ -8,6 +8,17 @@ class CollisionGrid:
     """
     def __init__(self, emulator: PokemonEmulator):
         self.emulator = emulator
+        # Use a set for O(1) lookups. Copy from global constants to allow instance-level learning.
+        self.walkable_ids = set(WALKABLE_BLOCK_IDS)
+
+    def add_walkable_byte(self, byte: int):
+        """
+        Dynamically adds a byte to the instance's walkable whitelist.
+        Useful for runtime learning (e.g., "bump" protocol).
+        """
+        if byte not in self.walkable_ids:
+            print(f"[CollisionGrid] Learned new walkable byte: {hex(byte)}")
+            self.walkable_ids.add(byte)
 
     def get_collision_grid(self, radius=6):
         """
@@ -36,7 +47,7 @@ class CollisionGrid:
                 collision_byte = self.emulator.read_ram(collision_addr)
                 
                 # This is a common pattern in Gen 1 games.
-                is_walkable = collision_byte in WALKABLE_BLOCK_IDS
+                is_walkable = collision_byte in self.walkable_ids
                 grid[f"{x},{y}"] = is_walkable
                 
         return {
@@ -53,4 +64,4 @@ class CollisionGrid:
         offset = (y + 3) * stride + (x + 3)
         collision_addr = COLLISION_MAP_START_ADDR + offset
         collision_byte = self.emulator.read_ram(collision_addr)
-        return collision_byte in WALKABLE_BLOCK_IDS
+        return collision_byte in self.walkable_ids
