@@ -10,7 +10,13 @@ NAMING_SCREEN_ADDR = 0xD116 # 0 = Normal, 1 = Player, 2 = Rival
 MENU_STATE_ADDR = 0xD05C    # Non-zero when a menu is open
 
 # Collision Map
-COLLISION_MAP_START_ADDR = 0xC4A0  # Start of the collision data for the current map
+COLLISION_MAP_START_ADDR = 0xC6E8  # wOverworldMap: Stores 2x2 block IDs. Formula: (y+3)*(width+6)+(x+3).
+
+# Valid Walkable Block IDs (Derived from wOverworldMap)
+# 0x03: Floor (Observed)
+# 0x00: Generic/Cuttable? (Legacy check)
+# 0x11: Floor? (Legacy check)
+WALKABLE_BLOCK_IDS = {0x00, 0x03, 0x11}
 
 # Hardware Registers
 LCDC_ADDR = 0xFF40    # LCD Control

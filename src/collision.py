@@ -1,5 +1,5 @@
 from src.emulator import PokemonEmulator
-from src.constants import MAP_WIDTH_ADDR, COLLISION_MAP_START_ADDR
+from src.constants import MAP_WIDTH_ADDR, COLLISION_MAP_START_ADDR, WALKABLE_BLOCK_IDS
 
 class CollisionGrid:
     """
@@ -25,8 +25,9 @@ class CollisionGrid:
         for y in range(player_y - radius, player_y + radius + 1):
             for x in range(player_x - radius, player_x + radius + 1):
                 # Calculate the memory address for the tile's collision data.
-                # The map data is stored row by row.
-                offset = y * map_width + x
+                # The map data is stored row by row with a 3-block border.
+                stride = map_width + 6
+                offset = (y + 3) * stride + (x + 3)
                 collision_addr = COLLISION_MAP_START_ADDR + offset
                 
                 # Read the collision byte. In Pokémon Blue, 0x00 is often walkable,
@@ -35,7 +36,7 @@ class CollisionGrid:
                 collision_byte = self.emulator.read_ram(collision_addr)
                 
                 # This is a common pattern in Gen 1 games.
-                is_walkable = collision_byte == 0x00 or collision_byte == 0x11
+                is_walkable = collision_byte in WALKABLE_BLOCK_IDS
                 grid[f"{x},{y}"] = is_walkable
                 
         return {
@@ -48,7 +49,8 @@ class CollisionGrid:
     def is_walkable(self, x, y):
         """Checks if a single specific tile is walkable."""
         map_width = self.emulator.read_ram(MAP_WIDTH_ADDR)
-        offset = y * map_width + x
+        stride = map_width + 6
+        offset = (y + 3) * stride + (x + 3)
         collision_addr = COLLISION_MAP_START_ADDR + offset
         collision_byte = self.emulator.read_ram(collision_addr)
-        return collision_byte == 0x00 or collision_byte == 0x11
+        return collision_byte in WALKABLE_BLOCK_IDS

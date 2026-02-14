@@ -331,13 +331,13 @@ class PokemonEmulator:
     def is_walkable(self, x, y):
         """Checks if a specific tile is walkable based on the true collision map data."""
         try:
-            # Need to import collision constant here or make it available
-            COLLISION_MAP_START_ADDR = 0xC4A0 
-            map_width = self.read_ram(0xD35D)
-            offset = y * map_width + x
+            map_width = self.read_ram(MAP_WIDTH_ADDR)
+            # Gen 1 Map Logic: wOverworldMap includes a 3-block border.
+            stride = map_width + 6
+            offset = (y + 3) * stride + (x + 3)
             collision_addr = COLLISION_MAP_START_ADDR + offset
             collision_byte = self.read_ram(collision_addr)
-            return collision_byte == 0x00
+            return collision_byte in WALKABLE_BLOCK_IDS
         except Exception:
             # If we read out of bounds or another error occurs, default to not walkable for safety.
             return False
@@ -347,7 +347,8 @@ class PokemonEmulator:
         Returns a dict with the byte value, RAM address, and walkability status.
         """
         map_width = self.read_ram(MAP_WIDTH_ADDR)
-        offset = y * map_width + x
+        stride = map_width + 6
+        offset = (y + 3) * stride + (x + 3)
         collision_addr = COLLISION_MAP_START_ADDR + offset
         collision_byte = self.read_ram(collision_addr)
         return {
@@ -356,7 +357,8 @@ class PokemonEmulator:
             "collision_byte": f"0x{collision_byte:02X}",
             "collision_byte_int": collision_byte,
             "ram_address": f"0x{collision_addr:04X}",
-            "is_walkable": collision_byte == 0x00 or collision_byte == 0x11,
+            "is_walkable": collision_byte in WALKABLE_BLOCK_IDS,
+            "note": "Value is a Block ID. Checked against WALKABLE_BLOCK_IDS."
         }
 
     def get_background_tiles(self):
