@@ -2,6 +2,7 @@ from pyboy import PyBoy
 import numpy as np
 from src.constants import *
 import time
+import hashlib
 
 class PokemonEmulator:
     def __init__(self, rom_path="PokemonBlue.gb", headless=True):
@@ -235,9 +236,10 @@ class PokemonEmulator:
     def move_direction(self, direction, steps=1):
         """
         Moves in the specified direction for a number of steps.
-        If steps is None, moves until blocked or a battle starts.
-        Returns: "arrived", "blocked", "transitioned", or "battle".
+        Provides high-fidelity feedback for every step, including visual changes.
+        Returns a JSON string containing the detailed results.
         """
+        import json
         btn_map = {
             "up": BUTTON_UP,
             "down": BUTTON_DOWN,
@@ -246,77 +248,91 @@ class PokemonEmulator:
         }
         button = btn_map.get(direction.lower())
         if not button:
-            return f"Error: Invalid direction '{direction}'"
+            return json.dumps({"error": f"Invalid direction '{direction}'"})
 
+        results = []
         total_steps = 0
-        max_continuous = 100 # Safety limit for None steps
-        limit = steps if steps is not None else max_continuous
+        limit = steps if steps is not None else 100
         
         while total_steps < limit:
-            if self.is_dialogue_active():
-                return f"stopped: dialogue or menu is active after {total_steps} steps"
-
+            # 1. Record PRE-state
             start_x, start_y = self.get_player_position()
             start_map = self.get_map_id()
+            start_img = self.screen_image()
+            start_hash = hashlib.md5(start_img.tobytes()).hexdigest()
             
+            # 2. Check for active screens before moving
+            if self.is_dialogue_active():
+                results.append({
+                    "step": total_steps,
+                    "status": "stopped",
+                    "reason": "dialogue_active",
+                    "pos": (start_x, start_y)
+                })
+                break
+
+            # 3. Execute Move
             self.input(button, hold_frames=5)
-            # Tick enough for one tile move or transition
-            self.tick(15)
+            self.tick(15) # Standard move duration
             
+            # 4. Record POST-state
             end_x, end_y = self.get_player_position()
             end_map = self.get_map_id()
+            end_img = self.screen_image()
+            end_hash = hashlib.md5(end_img.tobytes()).hexdigest()
             enemy_hp = self.read_ram(ENEMY_HP_ADDR)
+            
+            # 5. Analyze Step
+            pos_changed = (start_x, start_y) != (end_x, end_y)
+            map_changed = start_map != end_map
+            visual_changed = start_hash != end_hash
+            
+            # Identify Blocker/Target Tile
+            target_x, target_y = start_x, start_y
+            if direction == "up": target_y -= 1
+            elif direction == "down": target_y += 1
+            elif direction == "left": target_x -= 1
+            elif direction == "right": target_x += 1
+            
+            tile_data = self.read_map_memory(target_x, target_y)
+            
+            # Check for Events
+            event = None
+            if enemy_hp > 0: event = "battle_started"
+            elif map_changed: event = "map_transition"
+            elif self.is_npc_at(target_x, target_y): event = "npc_approached"
+            
+            # Detailed Result for this step
+            step_result = {
+                "step": total_steps + 1,
+                "direction": direction,
+                "moved": pos_changed,
+                "visual_change": visual_changed,
+                "pos": (end_x, end_y),
+                "map_id": end_map,
+                "event": event,
+                "tile_info": {
+                    "pos": (target_x, target_y),
+                    "collision_byte": tile_data["collision_byte"],
+                    "is_walkable": tile_data["is_walkable"]
+                }
+            }
+            results.append(step_result)
+            total_steps += 1
 
             # Check Termination Conditions
-            if enemy_hp > 0:
-                return f"battle started after {total_steps + 1} steps"
-                
-            if start_map != end_map:
-                return f"transitioned point reached (Map {end_map}) after {total_steps + 1} steps"
-
-            if (start_x, start_y) == (end_x, end_y):
-                # Blocked logic
-                try:
-                    target_x, target_y = start_x, start_y
-                    if direction == "up": target_y -= 1
-                    elif direction == "down": target_y += 1
-                    elif direction == "left": target_x -= 1
-                    elif direction == "right": target_x += 1
-                    
-                    mem_data = self.read_map_memory(target_x, target_y)
-                    byte = mem_data["collision_byte"]
-                    
-                    if self.is_npc_at(target_x, target_y):
-                        reason = f"blocked by NPC at ({target_x}, {target_y})"
-                    else:
-                        tiles = self.get_screen_tile_ids()
-                        tx, ty = 10, 9
-                        if direction == "up": ty -= 1
-                        elif direction == "down": ty += 1
-                        elif direction == "left": tx -= 1
-                        elif direction == "right": tx += 1
-                        
-                        tid = tiles[tx][ty] & 0xFF
-                        char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
-                        if tid == 0x7F:
-                            reason = f"blocked by Invisible Wall / Exit Mat (collision_byte={byte})"
-                        else:
-                            reason = f"blocked by {char} (collision_byte={byte})"
-                    
-                    if total_steps == 0:
-                        return reason
-                    else:
-                        return f"{reason} after {total_steps} steps"
-                except Exception as e:
-                    if total_steps == 0:
-                        return f"blocked (error identifying: {e})"
-                    return f"blocked after {total_steps} steps (error identifying: {e})"
+            if event or not pos_changed:
+                break
             
-            total_steps += 1
-            # Brief pause between steps for stability
+            # Brief stabilization
             self.tick(5)
             
-        return f"arrived (moved {total_steps} steps)"
+        return json.dumps({
+            "summary": f"moved {total_steps} steps" if total_steps > 0 else "blocked",
+            "final_pos": self.get_player_position(),
+            "final_map": self.get_map_id(),
+            "steps": results
+        })
 
     def input(self, button, hold_frames=5):
         """Press and release a button."""

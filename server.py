@@ -244,14 +244,24 @@ async def get_player_status() -> str:
 async def move_direction(direction: str, steps: int = 1) -> str:
     """
     PRIMARY MOVEMENT: Moves the player in a direction.
-    - Set `steps` to move a specific distance (e.g., 2 tiles).
-    - Set `steps=None` to move until blocked (useful for long corridors).
-    Returns: 'arrived', 'blocked', 'transitioned', or 'battle'.
+    Provides high-fidelity feedback including coordinates, visual changes, and events.
     """
-    result = run_on_main("move_direction", direction, steps)
-    if AUTO_CHECKPOINT_ENABLED and result != "blocked":
-        _auto_checkpoint(f"move_{direction}", f"steps={steps} result={result}")
-    return result
+    result_json = run_on_main("move_direction", direction, steps)
+    # result_json is already a JSON string from emulator.py
+    if AUTO_CHECKPOINT_ENABLED:
+        _auto_checkpoint(f"move_{direction}", f"steps={steps}")
+    return result_json
+
+@mcp.tool()
+async def scout_ahead(direction: str, max_steps: int = 10, on_battle: str = "interrupt") -> str:
+    """
+    EFFICIENT TRAVERSAL: Moves until a Point of Interest (NPC, Warp, Sign), Map Transition, 
+    or Blockage is hit. Great for clearing routes and long hallways.
+    """
+    result_json = run_on_main("scout_ahead", direction, max_steps, on_battle)
+    if AUTO_CHECKPOINT_ENABLED:
+        _auto_checkpoint(f"scout_{direction}")
+    return result_json
 
 @mcp.tool()
 async def execute_battle_turn(action: str) -> str:
@@ -344,16 +354,6 @@ async def debug_inspect_tile(x: int, y: int) -> str:
     Use this to learn which tile IDs are walkable vs blocked.
     """
     return run_on_main("read_map_memory", x, y)
-
-@mcp.tool()
-async def visual_guided_step(direction: str) -> str:
-    """
-    Attempts to move in a direction, verifying success via visual feedback.
-    Use this when you suspect the collision map is wrong (e.g. fake walls).
-    Returns: "Moved successfully", "Blocked", or "Visual change detected".
-    """
-    result = run_on_main("visual_guided_step", direction)
-    return result
 
 @mcp.tool()
 async def scan_surroundings(radius: int = 5) -> str:
@@ -471,8 +471,8 @@ def process_command(func_name, args, kwargs):
         elif func_name == "move_direction":
             result = str(emulator.move_direction(*args, **kwargs))
             return True, result
-        elif func_name == "visual_guided_step":
-            return True, navigation.visual_guided_step(args[0])
+        elif func_name == "scout_ahead":
+            return True, navigation.scout_ahead(*args, **kwargs)
         elif func_name == "walk_to":
             return True, navigation.walk_to(*args, **kwargs)
         elif func_name == "interact_with":

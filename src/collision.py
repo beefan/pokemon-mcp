@@ -21,6 +21,16 @@ class CollisionGrid:
             print(f"[CollisionGrid] Learned new walkable byte: {hex(byte)}")
             self.walkable_masks[byte] = DIR_ALL
 
+    def mark_direction_blocked(self, byte: int, direction_mask: int):
+        """
+        Removes a direction from a block's bitmask if it's found to be impassable.
+        Part of the Bump-and-Learn protocol (PKM-8).
+        """
+        if byte in self.walkable_masks:
+            # Bitwise NAND to clear the specific direction bit
+            self.walkable_masks[byte] &= ~direction_mask
+            print(f"[CollisionGrid] Learned blockage for {hex(byte)}: removed mask {direction_mask}. New mask: {self.walkable_masks[byte]}")
+
     def get_collision_grid(self, radius=6):
         """
         Returns a simple boolean grid of walkable tiles around the player.

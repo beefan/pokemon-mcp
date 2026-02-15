@@ -314,6 +314,100 @@ class Navigation:
             pass
         return warps
 
+    def _is_adjacent_to_poi(self):
+        """
+        Checks if any tile adjacent to the player contains an NPC, Warp, or interactive object.
+        Returns (True, reason) or (False, None).
+        """
+        px, py = self.emulator.get_player_position()
+        
+        # 1. Check for NPCs
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            if self.emulator.is_npc_at(px + dx, py + dy):
+                return True, f"NPC at ({px + dx}, {py + dy})"
+        
+        # 2. Check for Warps on current or adjacent tiles
+        warps = self._find_on_screen_warps()
+        for w in warps:
+            wx, wy = w["pos"]
+            if abs(px - wx) + abs(py - wy) <= 1:
+                return True, f"{w['type']} at ({wx}, {wy})"
+                
+        # 3. Check for specific interactive Tile IDs (Signs, Items)
+        try:
+            tiles = self.emulator.get_screen_tile_ids()
+            # Player is at (10, 9)
+            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                tid = tiles[10 + dx][9 + dy] & 0xFF
+                char = TILE_MAP.get(tid)
+                if char in ["o", "T", "!"]: # Pokéball, Table/PC, Sign
+                    return True, f"Interactive object '{char}' at ({px + dx}, {py + dy})"
+        except:
+            pass
+            
+        return False, None
+
+    def scout_ahead(self, direction, max_steps=10, on_battle="interrupt"):
+        """
+        Moves in a direction until a Point of Interest (POI), transition, or blockage is hit.
+        Uses high-fidelity steps for verification.
+        """
+        import json
+        total_moved = 0
+        stop_reason = None
+        all_results = []
+        
+        for i in range(max_steps):
+            # 1. Check for POI BEFORE moving
+            poi_found, poi_reason = self._is_adjacent_to_poi()
+            if poi_found:
+                stop_reason = f"POI_detected: {poi_reason}"
+                break
+                
+            # 2. Take one High-Fidelity Step
+            # move_direction returns a JSON string
+            step_json = self.emulator.move_direction(direction, steps=1)
+            step_data = json.loads(step_json)
+            step_res = step_data["steps"][0]
+            all_results.append(step_res)
+            
+            # 3. Analyze Step Result
+            if not step_res["moved"]:
+                stop_reason = "blocked"
+                break
+                
+            total_moved += 1
+            
+            if step_res["event"] == "battle_started":
+                if on_battle == "interrupt":
+                    stop_reason = "battle_interrupted"
+                    break
+                elif on_battle == "run":
+                    if self.battle_engine:
+                        self.battle_engine.run_away()
+                        self.emulator.tick(60)
+                        if self.emulator.read_ram(ENEMY_HP_ADDR) == 0:
+                            # Battle cleared, continue scouting
+                            continue
+                        else:
+                            stop_reason = "battle_trapped"
+                            break
+                    else:
+                        stop_reason = "error: no battle engine"
+                        break
+            
+            if step_res["event"] == "map_transition":
+                stop_reason = "map_transition"
+                break
+                
+        return json.dumps({
+            "summary": f"Scouted {total_moved} steps",
+            "stop_reason": stop_reason or "max_steps_reached",
+            "final_pos": self.emulator.get_player_position(),
+            "final_map": self.emulator.get_map_id(),
+            "steps": all_results
+        })
+
     def describe_tile(self, x, y, coordinate_type="screen"):
         """
         Describes a tile. Defaults to screen coords (0-19, 0-17).
@@ -519,42 +613,6 @@ class Navigation:
         nearby_str = f" [Nearby: {', '.join(set(nearby))}]" if nearby else ""
         return f"Map ID: {map_id}, Position: ({x}, {y}){nearby_str}"
 
-    def visual_guided_step(self, direction: str) -> str:
-        """
-        Attempts to move in a direction, verifying success via visual and coordinate feedback.
-        Returns a descriptive result string.
-        """
-        if direction not in ["up", "down", "left", "right"]:
-            return f"Invalid direction: {direction}"
-            
-        # 1. Capture Pre-Move State
-        start_x, start_y = self.emulator.get_player_position()
-        # We use the raw screen image bytes as a simple hash/signature
-        start_img = self.emulator.screen_image()
-        import hashlib
-        start_hash = hashlib.md5(start_img.tobytes()).hexdigest()
-        
-        # 2. Execute Move (Blindly)
-        self.emulator.move_direction(direction)
-        
-        # 3. Capture Post-Move State
-        end_x, end_y = self.emulator.get_player_position()
-        end_img = self.emulator.screen_image()
-        end_hash = hashlib.md5(end_img.tobytes()).hexdigest()
-        
-        # 4. Analyze Result
-        pos_changed = (start_x != end_x) or (start_y != end_y)
-        visual_changed = (start_hash != end_hash)
-        
-        if pos_changed:
-            return f"Moved successfully to ({end_x}, {end_y})"
-        elif visual_changed:
-            # Position same, but screen changed. 
-            # Could be a treadmill, a bump animation, or a warp that kept coords same (rare).
-            return "Visual change detected, but position unchanged (Blocked or Treadmill?)"
-        else:
-            return "Blocked (No visual or position change)"
-
     def walk_to(self, target_x, target_y, on_battle="interrupt", avoid_positions=None, max_steps=100):
         """
         Navigate to target coordinates.
@@ -715,11 +773,28 @@ class Navigation:
                 new_pos = self.emulator.get_player_position()
                 
                 if new_pos == current_pos:
-                    # Still blocked after recovery. Fail.
+                    # Still blocked after recovery. 
+                    # BUMP-AND-LEARN (PKM-8): Mark this direction as impassable for the target tile.
+                    try:
+                        # 1. Identify what we hit
+                        mem_data = self.emulator.read_map_memory(next_step[0], next_step[1])
+                        block_id = mem_data["collision_byte_int"]
+                        
+                        # 2. Determine approach mask
+                        from_dir = self._direction_to_target(current_pos, next_step)
+                        mask = DIRECTION_TO_BITMASK.get(from_dir)
+                        
+                        # 3. Update the session cache
+                        if hasattr(self.collision, "mark_direction_blocked"):
+                            self.collision.mark_direction_blocked(block_id, mask)
+                            last_debug = f"learned_blocked: block {hex(block_id)} mask {mask}"
+                    except:
+                        pass
+
                     try:
                         tiles = self.emulator.get_screen_tile_ids()
                         # tx, ty relative to player (10, 9)
-                        tx, ty = 10 + dx, 9 + dy
+                        tx, ty = 10 + (next_step[0] - current_x), 9 + (next_step[1] - current_y)
                         tid = tiles[tx][ty] & 0xFF
                         char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
                         return f"blocked: cannot step on {char} at {next_step} even after lateral recovery."

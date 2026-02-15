@@ -30,6 +30,12 @@ WALKABLE_BLOCK_IDS = {
     0x0A: DIR_ALL, # Warps/Doors
     0x05: DIR_ALL, # Oak's Lab Floor/Mat
     0x04: DIR_ALL, # Oak's Lab Carpet/Warp
+    0x0F: DIR_ALL, # Viridian City Floor
+    
+    # Route 1 / Grass Blocks (Observed)
+    0x0B: DIR_ALL, # Route 1 Grass/Path
+    0x4E: DIR_ALL, # Route 1 Ledge-Adjacent Grass
+    0x6D: DIR_ALL, # Route 1 Path
     
     # Directional Constraints (Ledges)
     0x36: DIR_DOWN, # South Ledge
