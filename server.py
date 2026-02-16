@@ -125,6 +125,40 @@ def _log_save_entry(context: str, filename: str):
     entry = f"{context} | map={map_id} pos=({px},{py}) | file={os.path.basename(filename)}"
     game_state.write_journal_entry(entry)
 
+def _log_navigation_event(tool_name: str, result_json: str):
+    """Parses tool output and logs a concise summary to the journal."""
+    if game_state is None:
+        return
+    try:
+        data = json.loads(result_json)
+        summary = data.get("summary", "N/A")
+        stop_reason = data.get("stop_reason", "")
+        final_pos = data.get("final_pos", (0,0))
+        final_map = data.get("final_map", 0)
+        
+        note = f"NavLog [{tool_name}]: {summary}"
+        if stop_reason:
+            note += f" | Stopped: {stop_reason}"
+            
+        # Log blocks specifically for AI memory
+        last_step = data.get("steps", [])[-1] if data.get("steps") else None
+        if last_step and not last_step.get("moved"):
+            block_pos = last_step.get("tile_info", {}).get("pos")
+            byte = last_step.get("tile_info", {}).get("collision_byte")
+            note += f" | BLOCKED at {block_pos} (byte={byte})"
+
+        metadata = {
+            "tool": tool_name,
+            "map_id": final_map,
+            "pos": final_pos,
+            "stop_reason": stop_reason,
+            "is_blocked": last_step and not last_step.get("moved")
+        }
+        game_state.write_journal_entry(note, metadata)
+    except:
+        # Fallback for simple string results (like walk_to sometimes returns)
+        game_state.write_journal_entry(f"NavLog [{tool_name}]: {result_json}")
+
 def get_emulator_info():
     """Returns info about the global instances (safe to call from background)."""
     global emulator, navigation, battle, game_state, vision
@@ -218,7 +252,9 @@ async def walk_to(x: int, y: int, on_battle: str = "interrupt", avoid_positions:
             - "run": Attempt to escape and continue.
             - "spam_attack": Fight blindly until won.
     """
-    return run_on_main("walk_to", x, y, on_battle, avoid_positions)
+    result = run_on_main("walk_to", x, y, on_battle, avoid_positions)
+    _log_navigation_event("walk_to", result)
+    return result
 
 @mcp.tool()
 async def interact_with(x: int, y: int) -> str:
@@ -247,7 +283,7 @@ async def move_direction(direction: str, steps: int = 1) -> str:
     Provides high-fidelity feedback including coordinates, visual changes, and events.
     """
     result_json = run_on_main("move_direction", direction, steps)
-    # result_json is already a JSON string from emulator.py
+    _log_navigation_event("move_direction", result_json)
     if AUTO_CHECKPOINT_ENABLED:
         _auto_checkpoint(f"move_{direction}", f"steps={steps}")
     return result_json
@@ -259,6 +295,7 @@ async def scout_ahead(direction: str, max_steps: int = 10, on_battle: str = "int
     or Blockage is hit. Great for clearing routes and long hallways.
     """
     result_json = run_on_main("scout_ahead", direction, max_steps, on_battle)
+    _log_navigation_event("scout_ahead", result_json)
     if AUTO_CHECKPOINT_ENABLED:
         _auto_checkpoint(f"scout_{direction}")
     return result_json
@@ -282,9 +319,9 @@ async def read_journal() -> str:
     return run_on_main("read_journal")
 
 @mcp.tool()
-async def write_journal_entry(note: str) -> str:
-    """Log a persistent note about the game state."""
-    return run_on_main("write_journal_entry", note)
+async def write_journal_entry(note: str, metadata: dict = None) -> str:
+    """Log a persistent note about the game state with optional structured metadata."""
+    return run_on_main("write_journal_entry", note, metadata)
 
 @mcp.tool()
 async def advance_dialogue() -> str:

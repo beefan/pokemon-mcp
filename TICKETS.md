@@ -5,11 +5,11 @@
 | **PKM-1** | [OPS-001] Create debug_inspect_tile Tool | Done | Debug tool for inspecting tiles. |
 | **PKM-2** | [OPS-002] Create CollisionSurveyor Script | Done | Map Pallet Town's collision data. |
 | **PKM-3** | [CORE-001] Refactor CollisionGrid for Dynamic Whitelists | To Do | Stop assuming 0x00 is the only walkable tile. |
-| **PKM-4** | [NAV-001] Implement visual_guided_step | Done | Tool that moves blindly but verifies visually. |
+| **PKM-4** | [NAV-001] Enhanced move_direction | Done | Consolidated stepping logic with high-fidelity feedback. |
 | **PKM-5** | [NAV-002] Oscillation Breaker in walk_to | Done | Prevent infinite left-right loops. |
-| **PKM-6** | [NAV-003] Enrich move_direction Feedback | To Do | Tell the agent *why* it was blocked. |
-| **PKM-7** | [NAV-004] Fix interact_with Feedback | To Do | Distinguish "Face & Press A" from "Step-On" warps. |
-| **PKM-8** | [CORE-002] Bump-and-Learn Session Cache | To Do | Runtime collision learning. |
+| **PKM-6** | [NAV-003] Enrich move_direction Feedback | Done | Tell the agent *why* it was blocked. |
+| **PKM-7** | [NAV-004] Fix interact_with Feedback | To Done | Distinguish "Face & Press A" from "Step-On" warps. |
+| **PKM-8** | [CORE-002] Bump-and-Learn Session Cache | Done | Runtime collision learning. |
 | **PKM-9** | [STATE-001] Implement get_game_state_flags | To Do | Read story progress from RAM. |
 | **PKM-10** | [UX-001] Advanced Dialogue Handling | To Do | Handle Yes/No prompts better. |
 | **PKM-11** | [TECH-001] Tech Debt & Stability | To Do | Code cleanup and stability fixes. |
@@ -21,9 +21,9 @@
 - **Goal**: Stop assuming `0x00` is the only walkable tile.
 - **Implementation**: Import `WALKABLE_TILE_IDS` from constants. Update `is_walkable` to check whitelist. Add `add_walkable_byte`.
 
-### PKM-4: [NAV-001] Implement visual_guided_step
-- **Goal**: A tool that moves blindly but verifies visually.
-- **Usage**: "I think this wall is fake. Move UP and check if my Y coordinate changed."
+### PKM-4: [NAV-001] Enhanced move_direction
+- **Goal**: Consolidated stepping logic with high-fidelity feedback (Coordinates, Visual Hash, Tile Info).
+- **Consolidation**: Replaces the redundant `visual_guided_step` tool.
 
 ### PKM-5: [NAV-002] Oscillation Breaker
 - **Goal**: Prevent infinite left-right loops in `walk_to`.

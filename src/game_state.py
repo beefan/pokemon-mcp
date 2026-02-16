@@ -32,11 +32,21 @@ class GameState:
         with open(self.journal_path, "r") as f:
             return json.load(f)
 
-    def write_journal_entry(self, note: str):
+    def write_journal_entry(self, note: str, metadata: dict = None):
+        import datetime
         data = self.read_journal()
-        data["entries"].append({
+        entry = {
+            "timestamp": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "note": note
-        })
+        }
+        if metadata:
+            entry["metadata"] = metadata
+            
+        data["entries"].append(entry)
+        # Keep only the last 100 entries to prevent context bloat
+        if len(data["entries"]) > 100:
+            data["entries"] = data["entries"][-100:]
+            
         with open(self.journal_path, "w") as f:
             json.dump(data, f, indent=2)
         return "Journal updated."

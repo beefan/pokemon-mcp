@@ -34,8 +34,7 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
     - Pathfind to the stairs at **(7, 1)**.
     - Use `move_direction` to step **ON TO** the stairs.
 3. **Leaving House (Map 37)**:
-    - Pathfind to the door at **(3, 7)**.
-    - Use `move_direction('down')` to exit.
+    - Use `scout_ahead('down')` to find the door and exit.
 4. **Result**: You should arrive in Pallet Town (Map 0).
 
 ## Phase 2: Oak's Lab & Selecting a Partner
@@ -46,29 +45,44 @@ Successfully arrive in your bedroom in Pallet Town and then exit the house.
     - **CRITICAL**: ID the Pokéballs on the table visually. Note their grid coordinates (x, y).
 3. **Execution Phase**:
     - Use `interact_with(x, y)` on the Pokéball's map coordinates.
-    - **Note**: This tool will automatically walk you to the nearest side of the table and interact. No need to `walk_to` separately.
+    - **Note**: This tool will automatically walk you to the nearest side of the table and interact.
 
-## Phase 3: Collect All Gym Badges
-
-## Phase 4: Defeat the Elite Four
+## Phase 3: Route 1 & Viridian City
+1. **Traverse Route 1**: Use `scout_ahead('up', max_steps=20, on_battle='run')` to clear the long grass sections efficiently.
+2. **Handle POIs**: If `scout_ahead` stops for a `POI_detected`, use `get_screen_analysis()` to see if it's an NPC you want to talk to.
 
 # Tactical Tool Inventory
 
 The following tools are at your disposal. Choosing the right one is the difference between a Junior Trainer and a Pokémon Master.
 
+## 0. Navigation Memory & The Journal (The "Memory")
+The MCP server automatically logs all navigation attempts to the Game Journal. 
+
+| Tool | Usage for Navigation |
+| :--- | :--- |
+| `read_journal()` | **CRITICAL**. Call this if you get stuck or restart. Look for `NavLog` entries. |
+| `write_journal_entry()`| Use this to log strategic notes (e.g., "Found a path around the ledge at (10,13)"). |
+
+### How to use NavLogs:
+- **`BLOCKED at (x, y)`**: If you see this in the journal, do not try to walk to or through that coordinate again in the same map.
+- **`Stopped: POI_detected`**: You are near something interesting (NPC, Sign, Item). Use `get_screen_analysis()` to identify it.
+- **`map_transition`**: You have successfully moved to a new area.
+
 ## 1. Vision & Observation (The "Eyes")
 
 | Tool | When to Use | Trade-offs |
 | :--- | :--- | :--- |
-| `get_screen_analysis()` | **PRIMARY VISION**. Captures screen & overlays a grid with coordinates. | **Pro**: Visual reality. specific coordinates. **Con**: Requires you to read the image path provided. |
-| `get_player_status()` | Quick check of Map ID. | **Pro**: Fast. **Con**: No environmental data. |
+| `get_screen_analysis()` | **PRIMARY VISION**. Captures screen & overlays a grid. | **Pro**: Visual reality. specific coordinates. **Con**: High token cost to read. |
+| `get_player_status()` | Quick check of Map ID and coordinates. | **Pro**: Fast. **Con**: No environmental data. |
 
 ## 2. Navigation (The "Legs")
 
 | Tool | When to Use | Trade-offs |
 | :--- | :--- | :--- |
-| `move_direction(dir, steps)` | **PRIMARY MOVEMENT**. Move X steps or until blocked (`steps=None`). | **Pro**: Reliable, standard. **Con**: You must plan the path using Vision. |
-| `interact_with(x, y)` | **REQUIRED** for objects (Pokéballs, PCs, Signs). | **Pro**: Auto-approach. **Con**: Short range. |
+| `scout_ahead(dir, max_steps)` | **PRIMARY TRAVERSAL**. Move until blocked or a POI is hit. | **Pro**: Fast, safe, efficient. **Con**: Stops at every NPC/Sign. |
+| `move_direction(dir, steps)` | **PRECISION MOVEMENT**. Move X steps. | **Pro**: High-fidelity verification (X, Y, Visual Hash). **Con**: Manual pathing. |
+| `walk_to(x, y)` | **LONG-RANGE AUTO-PILOT**. Navigate to map coordinates. | **Pro**: Autonomous pathfinding. **Con**: Can be blocked by ledges or NPCs. |
+| `interact_with(x, y)` | **REQUIRED** for objects (Pokéballs, PCs, Signs, talking to people). | **Pro**: Auto-approach and face. **Con**: Short range. |
 
 ## 3. Communication & State (The "Brain")
 
