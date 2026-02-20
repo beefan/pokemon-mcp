@@ -1,63 +1,103 @@
 # Pokémon Blue Strategic MCP Server
 
-An **MCP (Model Context Protocol)** server that acts as a tactical interface for Pokémon Blue (GameBoy). It enables an LLM agent to play the game by issuing high-level strategic commands while the server handles the frame-perfect execution and RAM monitoring.
+> [!WARNING]
+> **Project Status: Abandoned (Active Archive)**  
+> This project is currently on pause. While the tactical interface and RAM monitoring are robust, AI agents (Antigravity, etc.) struggle immensely with the nuanced navigation required for Pokémon Blue. Despite frequent improvements to the A* pathfinding and collision tools, agents often waste excessive tokens walking in circles or failing to navigate simple obstacles. I am "giving up" on this for now, but leaving the code as a reference for MCP development in complex environments.
+
+> [!NOTE]
+> **AI Authorship Disclaimer**  
+> This codebase was primarily generated and modified using AI coding assistants (**Antigravity**, **GeminiCLI**, and **codex**). As such, you may encounter "garbage" code, redundant logic, or experimental scaffolding that remains in the repository.
+
+## 🌟 Overview
+An **MCP (Model Context Protocol)** server that acts as a tactical interface for Pokémon Blue (GameBoy). it enables an LLM agent to play the game by issuing high-level strategic commands while the server handles the frame-perfect execution and RAM monitoring.
+
+---
 
 ## 🚀 Features
-- **Tactical Interface**: Abstracts low-level button presses into commands like `walk_to(x, y)`, `execute_battle_turn()`.
-- **Visual Intelligence**: Provides screenshots (`get_screen_analysis`) and OCR text to let the agent "see" the game.
-- **Auto-Navigation**: A* pathfinding with configurable policies for handling encounters and obstacles.
-- **Save/Load States**: Instant savestate management for retrying risky strategies.
-- **The Journal & Mission Control**: A persistent memory system that loads mission-critical instructions from `MISSION.md`.
+- **Tactical Interface**: Abstracts low-level button presses into high-level commands like `walk_to(x, y)` and `execute_battle_turn()`.
+- **Memory-Driven Vision**: Provides screenshots (`get_screen_analysis`) with coordinate overlays and OCR to help the agent "see".
+- **Collision Intelligence**: Real-time RAM inspection of collision maps to determine walkability accurately.
+- **Auto-Checkpointing**: Automatically saves game state before major actions to allow for easy recovery.
+- **Save/Load States**: Full management of emulator states for retrying strategies.
+- **Journaling**: A persistent memory system (`game_journal.json`) to track progress between sessions.
 
-## 🛠️ Setup
+---
+
+## 🛠️ Setup & Installation
 
 ### 1. Prerequisites
-- **Python 3.10+**
-- **GameBoy ROM**: You must provide your own legally obtained ROM file of *Pokémon Blue*. 
+- **Python 3.10+** (tested with Python 3.12)
+- **GameBoy ROM**: You must provide your own legally obtained ROM file of *Pokémon Blue*.
 
 ### 2. Installation
-1. Clone the repository and install dependencies:
-```bash
-git clone https://github.com/your-username/og-pokemon-mcp.git
-cd og-pokemon-mcp
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/beefan/pokemon-mcp.git
+    cd pokemon-mcp
+    ```
+2.  **Initialize Environment**:
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+    ```
+3.  **ROM Placement**:
+    Place your Pokémon Blue ROM in the root directory and rename it to `PokemonBlue.gb`.
+
+4.  **Mission Setup**:
+    Ensure `MISSION.md` is present in the root. This is the primary instruction file the agent reads to understand its goals.
+
+### 3. Running the Server
+
+While you can run the server manually, it is designed to be managed by your AI coding agent. This ensures the server starts automatically when you begin a session and environment variables (like `HEADLESS`) are set correctly.
+
+#### Codex Integration (`~/.codex/config.toml`)
+Add the following to your Codex configuration:
+```toml
+[mcp_servers.pokemon-blue]
+command = "/path/to/pokemon-mcp/.venv/bin/python"
+args = ["/path/to/pokemon-mcp/server.py"]
+
+[mcp_servers.pokemon-blue.env]
+HEADLESS = "false"  # Set to "true" for faster, windowless execution
 ```
 
-### 3. File Placement (CRITICAL)
-For the MCP server to work correctly, specific files must be present in the **working directory where the LLM agent is run**:
+#### Gemini CLI Integration (`~/.gemini/settings.json`)
+Add the following to your `mcpServers` block:
+```json
+"pokemon-blue": {
+  "command": "/path/to/pokemon-mcp/.venv/bin/python",
+  "args": [
+    "/path/to/pokemon-mcp/server.py"
+  ],
+  "env": {
+    "HEADLESS": "false"
+  }
+}
+```
 
-1.  **ROM**: Place your Pokémon Blue ROM in that directory and rename it to `PokemonBlue.gb`.
-2.  **Mission Control**: Copy `MISSION.md` from this project into that same directory. The agent uses this file to initialize its goals. You can customize this file to give the agent specific instructions.
+## 🎮 Exposed Tools
 
-## 🎮 Tools provided to the Agent
-
-| Tool | Purpose |
+| Tool | Description |
 | :--- | :--- |
-| `get_local_map` | Returns Map ID, (X,Y) coords, and an ASCII tile grid. |
-| `walk_to(x, y)` | Moves the player to coordinates using A* pathfinding. |
-| `get_screen_analysis` | Captures screen & overlays a grid with coordinates. Use this to see the world. |
-| `advance_dialogue` | Mashes A/B to clear text. Includes loop and naming screen detection. |
-| `press_buttons(seq)` | Macro for sequences like `'start, wait, a'`. |
-| `save_game / load_game` | Instantly capture or restore the emulator state. |
-| `read_journal` | Access the agent's persistent task list and mission notes. |
-| `read_ram_region` | Direct memory inspection for debugging flags. |
+| `get_screen_analysis` | **Primary Vision**. Returns a screenshot with a coordinate grid overlay. |
+| `get_player_status` | Returns current Map ID, (X, Y) coordinates, and nearby POIs. |
+| `walk_to(x, y)` | Navigates to a specific map coordinate using A* pathfinding. |
+| `move_direction(dir, steps)` | Moves the player in a cardinal direction for X steps. |
+| `interact_with(x, y)` | Walks to and interacts with an object (NPC, Item, PC). |
+| `advance_dialogue` | Mashes A/B buttons until the current text box/dialogue is cleared. |
+| `execute_battle_turn` | issues high-level battle commands (Attack, Switch, Item). |
+| `get_party_info` | Returns current Pokémon team stats (HP, Level, Moves). |
+| `get_collision_grid` | Returns a boolean grid of walkable tiles centered on the player. |
+| `save_game / load_game` | Captures or restores the full emulator state. |
+| `read_journal` | Accesses the persistent `game_journal.json` for task tracking. |
 
-## 💻 Running the Server
+---
 
-### Default (Headless Mode)
-Start the MCP server directly:
-```bash
-./.venv/bin/python server.py
-```
-
-### GUI Mode (Watch the AI play)
-To watch the emulation window live:
-```bash
-# MacOS/Linux
-HEADLESS=false ./.venv/bin/python server.py
-```
+## 💻 Tech Stack
+- **Framework**: [FastMCP](https://github.com/jlowin/fastmcp) (Python)
+- **Emulator**: [PyBoy](https://github.com/Baekalfen/PyBoy)
+- **Logic**: Custom A* implementation and RAM address mapping for Gen 1 Pokémon.
 
 ## ⚖️ Legal Disclaimer
 This project is an automation tool for GameBoy emulation. It does **not** include any Nintendo software, ROMs, or copyrighted assets.
