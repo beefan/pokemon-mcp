@@ -1,8 +1,8 @@
-from pyboy import PyBoy
-import numpy as np
-from src.constants import *
+import os
 import time
-import hashlib
+from PIL import Image
+from pyboy import PyBoy
+from src.constants import *
 
 class PokemonEmulator:
     def __init__(self, rom_path="PokemonBlue.gb", headless=True):
@@ -10,518 +10,352 @@ class PokemonEmulator:
         self.pyboy = PyBoy(rom_path, window="null" if headless else "SDL2")
         
         if headless:
-            self.pyboy.set_emulation_speed(0) # Unlimited for headless
+            self.pyboy.set_emulation_speed(0)  # Unlimited speed for headless
         else:
-            self.pyboy.set_emulation_speed(1) # Normal speed for windowed mode
-            
-    def tick(self, frames=1):
+            self.pyboy.set_emulation_speed(1)  # Normal speed for windowed mode
+
+    def tick(self, frames=1) -> bool:
         """Advance the emulator by a number of frames."""
-        # When in windowed mode, we need to ensure the OS event loop is processed.
-        # pyboy.tick() usually handles this, but a small delay can help stability at high speeds.
         for _ in range(frames):
             if not self.pyboy.tick():
-                # If tick returns False, the emulator window was closed.
                 return False
         return True
-            
-    def read_ram(self, address):
+
+    def read_ram(self, address: int) -> int:
         """Read a single byte from RAM."""
         return self.pyboy.memory[address]
-    
-    def write_ram(self, address, value):
+
+    def write_ram(self, address: int, value: int):
         """Write a single byte to RAM."""
         self.pyboy.memory[address] = value
 
-    def get_player_position(self):
+    def get_player_position(self) -> tuple[int, int]:
         """Return (x, y) tuple of player coordinates."""
         return (self.read_ram(PLAYER_X), self.read_ram(PLAYER_Y))
 
-    def get_map_id(self):
+    def get_map_id(self) -> int:
         """Return the current Map ID."""
         return self.read_ram(MAP_ID_ADDR)
 
-    def get_screen_scroll(self):
-        """Returns the (SCX, SCY) hardware register values."""
-        return self.read_ram(SCX_ADDR), self.read_ram(SCY_ADDR)
+    def get_map_name(self) -> str:
+        """Return the human-readable map name."""
+        map_id = self.get_map_id()
+        return MAP_NAMES.get(map_id, f"Map {map_id}")
 
-    def get_party_count(self):
-        """Return the number of Pokemon in the party."""
-        return self.read_ram(PARTY_COUNT_ADDR)
+    def screen_image(self) -> Image.Image:
+        """Return the native raw 160x144 screen image as a PIL Image."""
+        return self.pyboy.screen.image
 
-    def read_ram_region(self, start_address, length):
-        """Read a range of RAM bytes."""
-        return [self.read_ram(start_address + i) for i in range(length)]
+    def screen_image_upscaled(self, scale: int = 4) -> Image.Image:
+        """Return a clean, upscaled screenshot using nearest-neighbor interpolation."""
+        img = self.screen_image()
+        new_size = (img.width * scale, img.height * scale)
+        return img.resize(new_size, Image.Resampling.NEAREST)
 
-    def is_window_active(self):
+    def get_on_screen_text(self) -> str:
         """
-        Checks if the hardware Window layer is actually active and visible.
+        Extracts clean text currently rendered on the screen from the Game Boy
+        engine tilemap buffer (0xC3A0).
+        Returns an ASCII string with non-empty rows, or an empty string if no text is shown.
+        """
+        lines = []
+        for y in range(18):
+            row_bytes = [self.read_ram(TILEMAP_ADDR + y * 20 + x) for x in range(20)]
+            row_str = "".join([CHAR_MAP.get(b, " ") for b in row_bytes]).rstrip()
+            if row_str.strip():
+                lines.append(row_str)
+        return "\n".join(lines)
+
+    def get_dialogue_page_text(self) -> str:
+        """Reads text lines from rows 13-16 of the dialogue box in wTileMap."""
+        lines = []
+        for y in range(13, 17):
+            row_bytes = [self.read_ram(TILEMAP_ADDR + y * 20 + x) for x in range(1, 19)]
+            s = "".join([CHAR_MAP.get(b, " ") for b in row_bytes]).strip()
+            s = s.replace("▼", "").rstrip()
+            if s:
+                lines.append(s)
+        return "\n".join(lines)
+
+    def is_window_active(self) -> bool:
+        """
+        Checks if the hardware Window layer is active and within screen bounds.
         LCDC Register (0xFF40): Bit 5 enables the Window.
         WY Register (0xFF4A): Window Y position (0-143).
         """
         lcdc = self.read_ram(LCDC_ADDR)
         window_enabled = (lcdc & 0x20) != 0
         wy = self.read_ram(WY_ADDR)
-        
-        # Window is visible if enabled and Y starts within screen bounds
-        # Standard Gen 1 dialogue box has WY=144 (hidden) or WY=104 (row 13).
         return window_enabled and wy < 144
 
-    def is_dialogue_box_on_screen(self):
+    def is_dialogue_box_on_screen(self) -> bool:
         """
-        Scans the window layer for dialogue box border tiles.
-        Only runs if the hardware Window is active.
+        Checks if standard dialogue box borders are present in the tilemap buffer.
+        Standard Gen 1 dialogue box has top border at row 12 and bottom border at row 17.
         """
-        if not self.is_window_active():
-            return False
+        top_left = self.read_ram(TILEMAP_ADDR + 12 * 20)
+        top_right = self.read_ram(TILEMAP_ADDR + 12 * 20 + 19)
+        bot_left = self.read_ram(TILEMAP_ADDR + 17 * 20)
+        bot_right = self.read_ram(TILEMAP_ADDR + 17 * 20 + 19)
+        return (top_left == 0x79 or top_right == 0x7B) and (bot_left == 0x7D or bot_right == 0x7E)
 
-        try:
-            # For detection, we scan the RAW window tilemap directly
-            # to avoid Background interference.
-            win_map = self.pyboy.tilemap_window
-            
-            # Dialogue box top border is usually at row 12 or 13 relative to the Window Y.
-            # However, Gen 1 often just keeps it at the bottom of the map.
-            tl = win_map[0, 12] & 0xFF
-            tr = win_map[19, 12] & 0xFF
-            edge = win_map[10, 12] & 0xFF
-            
-            # Check for corners or a sustained horizontal edge
-            is_box = (tl in [0x79, 0xBA, 0x6E] or tr in [0x7A, 0xBA, 0x6E]) or (edge == 0x77)
-            return is_box
-        except:
-            return False
-
-    def is_dialogue_active(self):
-        """Check if a dialogue box or naming screen is active."""
-        # Battle menus use the Window layer but should not be treated as dialogue.
-        if self.is_battle_menu_active():
-            return False
-        ram_active = self.read_ram(DIALOGUE_STATE_ADDR) != 0
-        naming_active = self.read_ram(NAMING_SCREEN_ADDR) != 0
-        # Only check visual if the hardware window is on
-        visual_active = self.is_dialogue_box_on_screen()
-        return ram_active or visual_active or naming_active
-
-    def is_menu_active(self):
-        """Returns True when a menu is open (RAM flag)."""
-        return self.read_ram(MENU_STATE_ADDR) != 0
-
-    def is_battle_active(self):
-        """Returns True when an enemy is present."""
+    def is_battle_active(self) -> bool:
+        """Returns True when an enemy is present in combat."""
         return self.read_ram(ENEMY_HP_ADDR) > 0
 
-    def is_battle_menu_active(self):
-        """
-        Heuristic: detect battle menu text on the screen.
-        This avoids treating battle menus as dialogue.
-        """
-        # Avoid heavy scans if not in battle or no window
-        if not self.is_battle_active() or not self.is_window_active():
+    def is_battle_menu_active(self) -> bool:
+        """Detects if the in-battle action menu (FIGHT/PKMN/ITEM/RUN) is open."""
+        if not self.is_battle_active():
             return False
-        full_text = self.get_full_screen_text()
-        # Common battle menu labels in Gen 1
-        return any(k in full_text for k in ["FIGHT", "PKMN", "ITEM", "RUN"])
-        
-    def advance_dialogue(self):
-        """Guaranteed mash of A and B for a set number of frames with state verification."""
-        # 0. STARTUP BUFFER: Give the emulator a few frames to render the box
-        # if the tool was called immediately after an interaction.
-        self.tick(10)
+        screen_text = self.get_on_screen_text()
+        return any(k in screen_text for k in ["FIGHT", "PKMN", "ITEM", "RUN"])
 
-        # 1. Capture full screen text for robust detection
-        full_text = self.get_full_screen_text()
-        is_naming_screen = any(k in full_text for k in ["YOUR NAME", "RIVAL'S NAME", "A B C D E", "ED"])
-        
-        if is_naming_screen:
-            return f"CRITICAL STOP: You are on the NAMING SCREEN.\nAction: Use press_buttons('start, wait, a') to accept a default name."
+    def is_menu_active(self) -> bool:
+        """Returns True when a start menu, choice prompt, or battle menu is active."""
+        if self.read_ram(MENU_WATCHED_KEYS_ADDR) != 0:
+            return True
+        if self.read_ram(MENU_STATE_ADDR) != 0:
+            return True
+        if self.is_battle_menu_active():
+            return True
+        text = self.get_on_screen_text()
+        # Menu cursor ▶ is present while not inside a dialogue speech box
+        if "▶" in text and not self.is_dialogue_box_on_screen():
+            return True
+        return False
 
-        # Menu guard: do not mash through menus (battle or otherwise).
+    def is_dialogue_active(self) -> bool:
+        """Checks if dialogue or cutscene text is active and waiting or progressing."""
         if self.is_menu_active() or self.is_battle_menu_active():
-            return "STOP: Menu active (battle or system). Use battle tools or manual menu input instead of advance_dialogue."
+            return False
+        if self.read_ram(DIALOGUE_STATE_ADDR) != 0:
+            return True
+        if self.read_ram(NAMING_SCREEN_ADDR) != 0:
+            return True
+        if self.is_dialogue_box_on_screen():
+            return True
+        return False
 
-        pre_text = self.get_dialogue_text()
-        
-        # 1. Mash and Watch (Stubborn Persistence)
-        mash_limit = 12
-        total_mashes = 0
-        safety_breakout = 100 # Maximum A presses allowed in one tool call
-        
-        for _ in range(mash_limit):
-            # Mash while dialogue is active
-            while self.is_dialogue_active():
-                if total_mashes >= safety_breakout:
-                     return "STOP: ZOMBIE STATE DETECTED. Dialogue box is stuck after 100 mashes. Are you in a menu or a static screen? Try pressing B or moving away."
-                
-                self.input(BUTTON_A, hold_frames=5)
-                self.tick(8)
-                self.input(BUTTON_B, hold_frames=5)
-                self.tick(8)
-                total_mashes += 1
-            
-            # Dialogue box disappeared. STUBBORN PERSISTENCE: 
-            # Wait and watch for 60 frames (1 second) to see if it returns.
-            dialogue_returned = False
-            for _ in range(30): # Check frequently over 1 second total
-                self.tick(2)
-                if self.is_dialogue_active():
-                    dialogue_returned = True
-                    break
-            
-            if not dialogue_returned:
-                # It stayed closed for the full window. We are done!
-                break
-            # Otherwise, it returned, so the loop continues and we mash again.
-            
-        # 2. FINAL STABILIZE
-        self.tick(15)
-            
-        # Check current state (Multi-factor)
-        active = self.is_dialogue_active()
-        post_text = self.get_dialogue_text()
-        full_text_after = self.get_full_screen_text()
-        
-        # Re-check naming screen
-        if any(k in full_text_after for k in ["YOUR NAME", "RIVAL'S NAME", "A B C D E", "ED"]):
-             return f"STOP: You have reached the NAMING SCREEN.\nAction: Use press_buttons('start, wait, a') to finish naming."
-
-        # Scenario 1: Dialogue is truly closed
-        if not active:
-            return "STATE CHANGE: Dialogue has CLOSED."
-
-        # Scenario 2: Loop Detection
-        if pre_text.strip() == post_text.strip() and len(post_text.strip()) > 0:
-            return f"LOOP DETECTED: The text '{post_text.strip()}' has not changed.\nAction: Use walk_to to move away if this is the end of a sequence."
-             
-        return f"Dialogue Progressing. Content:\n{post_text.strip()}"
-
-    def get_dialogue_text(self):
-        """Reads the text specifically from the Window layer (rows 12-16)."""
-        if not self.is_window_active():
-            return ""
-
-        # Use raw Window tiles to avoid Background "bleed-through"
-        win_map = self.pyboy.tilemap_window
-        text_lines = []
-        for y in range(13, 17):
-            line = ""
-            for x in range(1, 19): 
-                tid = win_map[x, y] & 0xFF
-                char = TILE_MAP.get(tid, " ")
-                line += char
-            if line.strip():
-                text_lines.append(line.strip())
-        return "\n".join(text_lines)
-
-    def get_full_screen_text(self):
-        """Scans the entire 20x18 screen for characters."""
-        tiles = self.get_screen_tile_ids()
-        rows = []
-        for y in range(18):
-            line = ""
-            for x in range(20):
-                tid = tiles[x][y] & 0xFF
-                line += TILE_MAP.get(tid, " ")
-            if line.strip():
-                rows.append(line.rstrip())
-            else:
-                rows.append("") 
-        return "\n".join(rows)
-
-    def wait(self, duration_seconds):
-        """Waits for a period of time (60 frames per second)."""
-        frames = int(duration_seconds * 60)
-        self.tick(frames)
-        return f"Waited {duration_seconds} seconds."
-
-    def move_direction(self, direction, steps=1):
+    def get_clean_state(self, save_path: str = "screen.png") -> dict:
         """
-        Moves in the specified direction for a number of steps.
-        Provides high-fidelity feedback for every step, including visual changes.
-        Returns a JSON string containing the detailed results.
+        Primary sensory method.
+        Saves a 4x nearest-neighbor upscaled screenshot (640x576) and returns
+        visual text, position, map, and status flags.
         """
-        import json
+        upscaled = self.screen_image_upscaled(scale=4)
+        abs_path = os.path.abspath(save_path)
+        upscaled.save(abs_path)
+
+        map_id = self.get_map_id()
+        map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
+        pos = list(self.get_player_position())
+        screen_text = self.get_on_screen_text()
+        in_battle = self.is_battle_active()
+        dialogue_active = self.is_dialogue_active()
+        menu_active = self.is_menu_active()
+
+        return {
+            "image_path": abs_path,
+            "screen_text": screen_text,
+            "map_id": map_id,
+            "map_name": map_name,
+            "position": pos,
+            "in_battle": in_battle,
+            "dialogue_active": dialogue_active,
+            "menu_active": menu_active,
+        }
+
+    def step(self, direction: str, count: int = 1) -> dict:
+        """
+        Executes verified cardinal movement across the overworld.
+        Respects 16-frame movement grid and turn delay.
+        Halts immediately on obstacles, battles, warps, or dialogue triggers.
+        """
+        d_clean = direction.lower().strip()
         btn_map = {
             "up": BUTTON_UP,
             "down": BUTTON_DOWN,
             "left": BUTTON_LEFT,
-            "right": BUTTON_RIGHT
+            "right": BUTTON_RIGHT,
         }
-        button = btn_map.get(direction.lower())
-        if not button:
-            return json.dumps({"error": f"Invalid direction '{direction}'"})
+        if d_clean not in btn_map:
+            raise ValueError(f"Invalid direction '{direction}'. Must be 'up', 'down', 'left', or 'right'.")
 
-        results = []
-        total_steps = 0
-        limit = steps if steps is not None else 100
-        
-        while total_steps < limit:
-            # 1. Record PRE-state
-            start_x, start_y = self.get_player_position()
-            start_map = self.get_map_id()
-            start_img = self.screen_image()
-            start_hash = hashlib.md5(start_img.tobytes()).hexdigest()
-            
-            # 2. Check for active screens before moving
+        count = max(1, min(10, count))
+        btn = btn_map[d_clean]
+        steps_completed = 0
+        interrupted_by = None
+
+        for _ in range(count):
+            # Pre-step checks
+            if self.is_battle_active():
+                interrupted_by = "battle_started"
+                break
             if self.is_dialogue_active():
-                results.append({
-                    "step": total_steps,
-                    "status": "stopped",
-                    "reason": "dialogue_active",
-                    "pos": (start_x, start_y)
-                })
+                interrupted_by = "dialogue_started"
                 break
 
-            # 3. Execute Move
-            self.input(button, hold_frames=5)
-            self.tick(15) # Standard move duration
-            
-            # 4. Record POST-state
-            end_x, end_y = self.get_player_position()
+            start_pos = self.get_player_position()
+            start_map = self.get_map_id()
+
+            # Execute step: hold button for 8 frames, tick 16 frames for standard grid step
+            self.pyboy.button_press(btn)
+            self.tick(8)
+            self.pyboy.button_release(btn)
+            self.tick(16)
+
+            end_pos = self.get_player_position()
             end_map = self.get_map_id()
-            end_img = self.screen_image()
-            end_hash = hashlib.md5(end_img.tobytes()).hexdigest()
-            enemy_hp = self.read_ram(ENEMY_HP_ADDR)
-            
-            # 5. Analyze Step
-            pos_changed = (start_x, start_y) != (end_x, end_y)
-            map_changed = start_map != end_map
-            visual_changed = start_hash != end_hash
-            
-            # Identify Blocker/Target Tile
-            target_x, target_y = start_x, start_y
-            if direction == "up": target_y -= 1
-            elif direction == "down": target_y += 1
-            elif direction == "left": target_x -= 1
-            elif direction == "right": target_x += 1
-            
-            tile_data = self.read_map_memory(target_x, target_y)
-            
-            # Check for Events
-            event = None
-            if enemy_hp > 0: event = "battle_started"
-            elif map_changed: event = "map_transition"
-            elif self.is_npc_at(target_x, target_y): event = "npc_approached"
-            
-            # Detailed Result for this step
-            step_result = {
-                "step": total_steps + 1,
-                "direction": direction,
-                "moved": pos_changed,
-                "visual_change": visual_changed,
-                "pos": (end_x, end_y),
-                "map_id": end_map,
-                "event": event,
-                "tile_info": {
-                    "pos": (target_x, target_y),
-                    "collision_byte": tile_data["collision_byte"],
-                    "is_walkable": tile_data["is_walkable"]
-                }
-            }
-            results.append(step_result)
-            total_steps += 1
 
-            # Check Termination Conditions
-            if event or not pos_changed:
+            # Post-step checks
+            if self.is_battle_active():
+                steps_completed += 1
+                interrupted_by = "battle_started"
                 break
-            
-            # Brief stabilization
-            self.tick(5)
-            
-        return json.dumps({
-            "summary": f"moved {total_steps} steps" if total_steps > 0 else "blocked",
-            "final_pos": self.get_player_position(),
-            "final_map": self.get_map_id(),
-            "steps": results
-        })
 
-    def input(self, button, hold_frames=5):
-        """Press and release a button."""
-        self.pyboy.button_press(button)
-        if not self.tick(hold_frames):
-            return
-        self.pyboy.button_release(button)
-        self.tick(5) # Faster gap
+            if end_map != start_map:
+                steps_completed += 1
+                interrupted_by = "map_transition"
+                # Allow warp transition to fully complete (screen fade-out, map load, and fade-in)
+                self.tick(60)
+                break
 
-    def screen_image(self):
-        """Return the current screen image (for visual debugging if needed)."""
-        return self.pyboy.screen.image
+            if self.is_dialogue_active():
+                steps_completed += 1
+                interrupted_by = "dialogue_started"
+                break
 
-    def save_state(self, filepath="savegame.state"):
+            if end_pos == start_pos:
+                interrupted_by = "hit_obstacle"
+                break
+
+            steps_completed += 1
+
+        final_map_id = self.get_map_id()
+        final_map_name = MAP_NAMES.get(final_map_id, f"Map {final_map_id}")
+
+        return {
+            "steps_completed": steps_completed,
+            "final_position": list(self.get_player_position()),
+            "final_map": final_map_name,
+            "map_id": final_map_id,
+            "interrupted_by": interrupted_by,
+        }
+
+    def press_sequence(self, buttons: list[str], delay_frames: int = 15) -> dict:
+        """
+        Executes fine-grained button presses with delays for menus, naming, battles, and interactions.
+        Holds each button for 6 frames, ticks delay_frames, then executes the next.
+        """
+        btn_map = {
+            "a": BUTTON_A,
+            "b": BUTTON_B,
+            "start": BUTTON_START,
+            "select": BUTTON_SELECT,
+            "up": BUTTON_UP,
+            "down": BUTTON_DOWN,
+            "left": BUTTON_LEFT,
+            "right": BUTTON_RIGHT,
+        }
+        executed = []
+        for b in buttons:
+            b_clean = b.lower().strip()
+            if b_clean not in btn_map:
+                raise ValueError(f"Invalid button '{b}'. Valid buttons are: {list(btn_map.keys())}")
+            btn = btn_map[b_clean]
+            self.pyboy.button_press(btn)
+            self.tick(6)
+            self.pyboy.button_release(btn)
+            self.tick(delay_frames)
+            executed.append(b_clean)
+
+        return {
+            "presses": executed,
+            "screen_text": self.get_on_screen_text(),
+            "in_battle": self.is_battle_active(),
+            "dialogue_active": self.is_dialogue_active(),
+            "menu_active": self.is_menu_active(),
+        }
+
+    def advance_dialogue(self, max_pages: int = 5) -> dict:
+        """
+        Fast-forwards through multi-page NPC speech and cutscenes without losing context.
+        Captures each page's text into a transcript before advancing.
+        Halts immediately if a choice prompt appears or if the dialogue box closes.
+        """
+        # Startup buffer: wait up to 30 frames for a dialogue box or prompt if called right after interaction
+        for _ in range(15):
+            wTileMap = [self.read_ram(TILEMAP_ADDR + i) for i in range(360)]
+            if (self.read_ram(TILEMAP_ADDR + 12 * 20) == 0x79) or (0xED in wTileMap):
+                break
+            self.tick(2)
+
+        pages = []
+        status = "dialogue_closed"
+
+        for _ in range(max_pages):
+            page_captured = False
+            for _ in range(200):
+                self.tick(2)
+                wTileMap = [self.read_ram(TILEMAP_ADDR + i) for i in range(360)]
+
+                # Check for choice prompt (cursor ▶)
+                if 0xED in wTileMap:
+                    status = "prompt_detected"
+                    page_text = self.get_dialogue_page_text()
+                    if page_text and (not pages or pages[-1] != page_text):
+                        pages.append(page_text)
+                    return {"pages": pages, "status": status}
+
+                # Check if dialogue box is open
+                has_box = (self.read_ram(TILEMAP_ADDR + 12 * 20) == 0x79)
+                if not has_box:
+                    # Give it a few frames to see if it re-opens (page transition)
+                    reopened = False
+                    for _ in range(20):
+                        self.tick(2)
+                        if self.read_ram(TILEMAP_ADDR + 12 * 20) == 0x79:
+                            reopened = True
+                            break
+                    if not reopened:
+                        status = "dialogue_closed"
+                        return {"pages": pages, "status": status}
+
+                # Check for down arrow (0xEE)
+                if 0xEE in wTileMap:
+                    page_text = self.get_dialogue_page_text()
+                    if page_text and (not pages or pages[-1] != page_text):
+                        pages.append(page_text)
+                    self.pyboy.button_press(BUTTON_A)
+                    self.tick(6)
+                    self.pyboy.button_release(BUTTON_A)
+                    self.tick(10)
+                    page_captured = True
+                    break
+                else:
+                    # Accelerate text typing with A
+                    self.pyboy.button_press(BUTTON_A)
+                    self.tick(2)
+                    self.pyboy.button_release(BUTTON_A)
+
+            if not page_captured:
+                break
+
+        has_box = (self.read_ram(TILEMAP_ADDR + 12 * 20) == 0x79)
+        return {"pages": pages, "status": "dialogue_closed" if not has_box else "prompt_detected" if (0xED in [self.read_ram(TILEMAP_ADDR + i) for i in range(360)]) else "dialogue_closed"}
+
+    def save_state(self, filepath: str = "saves/savegame.state") -> str:
         """Save the current emulator state to a file."""
+        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
         with open(filepath, "wb") as f:
             self.pyboy.save_state(f)
         return f"Game state saved to {filepath}"
 
-    def load_state(self, filepath="savegame.state"):
+    def load_state(self, filepath: str = "saves/savegame.state") -> str:
         """Load an emulator state from a file."""
-        import os
         if not os.path.exists(filepath):
             return f"Error: Save file {filepath} not found."
         with open(filepath, "rb") as f:
             self.pyboy.load_state(f)
+        self.tick(5)  # Stabilization frames
         return f"Game state loaded from {filepath}"
-
-    def is_npc_at(self, x, y):
-        """
-        Checks if an NPC is currently at the target map coordinates.
-        Gen 1 Sprite Data ($C100-$C1FF):
-        - 16 bytes per sprite.
-        - Byte 4: Y Map Coord (offset by 4)
-        - Byte 6: X Map Coord (offset by 4)
-        """
-        for slot in range(1, 16): # Slot 0 is Player
-            base = 0xC100 + (slot * 16)
-            if self.read_ram(base) == 0: continue # Inactive
-            
-            # Map coordinates are stored offset by 4
-            sprite_y = self.read_ram(base + 4) - 4
-            sprite_x = self.read_ram(base + 6) - 4
-            
-            if sprite_x == x and sprite_y == y:
-                return True
-        return False
-
-    def is_walkable(self, x, y):
-        """Checks if a specific tile is walkable based on the true collision map data."""
-        try:
-            map_width = self.read_ram(MAP_WIDTH_ADDR)
-            # Gen 1 Map Logic: wOverworldMap includes a 3-block border.
-            stride = map_width + 6
-            offset = (y + 3) * stride + (x + 3)
-            collision_addr = COLLISION_MAP_START_ADDR + offset
-            collision_byte = self.read_ram(collision_addr)
-            return collision_byte in WALKABLE_BLOCK_IDS
-        except Exception:
-            # If we read out of bounds or another error occurs, default to not walkable for safety.
-            return False
-
-    def read_map_memory(self, x, y):
-        """Read the raw collision byte at map coordinates (x, y).
-        Returns a dict with the byte value, RAM address, and walkability status.
-        """
-        map_width = self.read_ram(MAP_WIDTH_ADDR)
-        stride = map_width + 6
-        offset = (y + 3) * stride + (x + 3)
-        collision_addr = COLLISION_MAP_START_ADDR + offset
-        collision_byte = self.read_ram(collision_addr)
-        return {
-            "x": x,
-            "y": y,
-            "collision_byte": f"0x{collision_byte:02X}",
-            "collision_byte_int": collision_byte,
-            "ram_address": f"0x{collision_addr:04X}",
-            "is_walkable": collision_byte in WALKABLE_BLOCK_IDS,
-            "note": "Value is a Block ID. Checked against WALKABLE_BLOCK_IDS."
-        }
-
-        return {
-            "x": x,
-            "y": y,
-            "collision_byte": f"0x{collision_byte:02X}",
-            "collision_byte_int": collision_byte,
-            "ram_address": f"0x{collision_addr:04X}",
-            "is_walkable": collision_byte in WALKABLE_BLOCK_IDS,
-            "note": "Value is a Block ID. Checked against WALKABLE_BLOCK_IDS."
-        }
-    
-    def scan_map_area(self, center_x, center_y, radius=5):
-        """
-        Scans a square area of the map around the given center coordinates.
-        Returns a 2D grid/list of collision data.
-        """
-        grid = []
-        # Ensure we don't scan off the map negative coordinates (though address math might handle it weirdly)
-        # Gen 1 maps can be large, so simple bounds check is hard without map_height. 
-        # We'll just run it and let read_map_memory handle the math.
-        
-        for y in range(center_y - radius, center_y + radius + 1):
-            row = []
-            for x in range(center_x - radius, center_x + radius + 1):
-                data = self.read_map_memory(x, y)
-                row.append(data)
-            grid.append(row)
-            
-        return grid
-    
-    def get_background_tiles(self):
-        """
-        Returns a 20x18 matrix of tile IDs from the Background layer.
-        Accounts for Scroll X (SCX) and Scroll Y (SCY).
-        """
-        # SCX/SCY are hardware registers in the range 0xFF40-0xFF4B
-        scy = self.pyboy.memory[0xFF42]
-        scx = self.pyboy.memory[0xFF43]
-        
-        # Tile coordinates on the 32x32 BG map
-        start_tile_x = scx // 8
-        start_tile_y = scy // 8
-        
-        # Get the full 32x32 tilemap IDs
-        bg_map = self.pyboy.tilemap_background
-        
-        matrix = []
-        for x in range(20):
-            column = []
-            for y in range(18):
-                # Handle 32x32 wraparound
-                tx = (start_tile_x + x) % 32
-                ty = (start_tile_y + y) % 32
-                column.append(bg_map[tx, ty])
-            matrix.append(column)
-        return matrix
-
-    def get_window_tiles(self):
-        """
-        Returns a 20x18 matrix of tile IDs from the Window layer (HUD/Menus).
-        """
-        # The Window layer is also 32x32, usually shown starting at (0,0) 
-        # when active (WY/WX registers control visibility).
-        win_map = self.pyboy.tilemap_window
-        
-        matrix = []
-        for x in range(20):
-            column = []
-            for y in range(18):
-                column.append(win_map[x, y])
-            matrix.append(column)
-        return matrix
-
-    def get_screen_tile_ids(self):
-        """
-        Returns a 20x18 composite tile ID matrix (Window over Background).
-        Accounts for hardware window visibility and position.
-        """
-        bg = self.get_background_tiles()
-        
-        if not self.is_window_active():
-            return bg
-
-        win = self.get_window_tiles()
-        wy = self.read_ram(WY_ADDR)
-        wy_tiles = wy // 8
-        
-        # Composite: Only overlay window tiles where the window is hardware-visible.
-        # Gen 1 dialogue box usually has WY=104 (Start row 13).
-        composite = []
-        for x in range(20):
-            column = []
-            for y in range(18):
-                if y >= wy_tiles:
-                    column.append(win[x][y])
-                else:
-                    column.append(bg[x][y])
-            composite.append(column)
-        return composite
-
-    def describe_tile(self, screen_x, screen_y):
-        """
-        Returns a semantic description of the tile at screen coordinates (0-19, 0-17).
-        """
-        try:
-            tiles = self.get_screen_tile_ids()
-            tid = tiles[screen_x][screen_y] & 0xFF
-            char = TILE_MAP.get(tid, f"ID:0x{tid:02X}")
-            name = TILE_NAMES.get(char, "Unknown")
-            return f"Tile at ({screen_x}, {screen_y}) is '{char}' ({name})"
-        except Exception as e:
-            return f"Error describing tile: {e}"
