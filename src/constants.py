@@ -5,43 +5,10 @@ MAP_ID_ADDR = 0xD35E
 MAP_WIDTH_ADDR = 0xD369
 ENEMY_HP_ADDR = 0xD057
 DIALOGUE_STATE_ADDR = 0xD11B
-PARTY_COUNT_ADDR = 0xD163
-NAMING_SCREEN_ADDR = 0xD116 # 0 = Normal, 1 = Player, 2 = Rival
-MENU_STATE_ADDR = 0xD05C    # Non-zero when a menu is open
-
-# Collision Map
-COLLISION_MAP_START_ADDR = 0xC6E8  # wOverworldMap: Stores 2x2 block IDs. Formula: (y+3)*(width+6)+(x+3).
-
-# Direction Bitmasks (Allowed Exit Directions)
-DIR_UP    = 1
-DIR_DOWN  = 2
-DIR_LEFT  = 4
-DIR_RIGHT = 8
-DIR_ALL   = 15
-
-# Valid Walkable Block IDs (Derived from wOverworldMap)
-# Mapping: BlockID -> Bitmask of allowed exit directions.
-# For standard floors, all directions are allowed.
-WALKABLE_BLOCK_IDS = {
-    0x00: DIR_ALL, # Standard Floor
-    0x03: DIR_ALL, # Pallet Town Floor
-    0x11: DIR_ALL, # Status Check (Legacy)
-    0x0C: DIR_ALL, # Grass
-    0x0A: DIR_ALL, # Warps/Doors
-    0x05: DIR_ALL, # Oak's Lab Floor/Mat
-    0x04: DIR_ALL, # Oak's Lab Carpet/Warp
-    0x0F: DIR_ALL, # Viridian City Floor
-    
-    # Route 1 / Grass Blocks (Observed)
-    0x0B: DIR_ALL, # Route 1 Grass/Path
-    0x4E: DIR_ALL, # Route 1 Ledge-Adjacent Grass
-    0x6D: DIR_ALL, # Route 1 Path
-    
-    # Directional Constraints (Ledges)
-    0x36: DIR_DOWN, # South Ledge
-    0x35: DIR_LEFT, # Left Ledge (Approximate, needs verification)
-    0x37: DIR_RIGHT,# Right Ledge (Approximate, needs verification)
-}
+NAMING_SCREEN_ADDR = 0xD116  # 0 = Normal, 1 = Player, 2 = Rival
+MENU_STATE_ADDR = 0xD05C     # Non-zero when system menu is open
+MENU_WATCHED_KEYS_ADDR = 0xCFC4 # Non-zero when menu joypad loop is active
+TILEMAP_ADDR = 0xC3A0       # wTileMap: 20x18 on-screen tilemap buffer (360 bytes)
 
 # Hardware Registers
 LCDC_ADDR = 0xFF40    # LCD Control
@@ -49,11 +16,6 @@ SCY_ADDR = 0xFF42     # Scroll Y
 SCX_ADDR = 0xFF43     # Scroll X
 WY_ADDR = 0xFF4A      # Window Y Position
 WX_ADDR = 0xFF4B      # Window X Position
-
-# Tile IDs (Approximate - need verification during runtime or from docs, using placeholders for now if specific IDs aren't known, 
-# but common ones for Gen 1 are often documented. For now, strict collision logic might rely on the map data tool inspection)
-# We will rely on get_local_map returning 'W', 'P', etc based on map scripts or raw tile ranges. 
-# For now, we just export the addresses.
 
 # Input Buttons
 BUTTON_A = "a"
@@ -65,80 +27,328 @@ BUTTON_DOWN = "down"
 BUTTON_LEFT = "left"
 BUTTON_RIGHT = "right"
 
-# Tile ID to Character Mapping (Pokemon Blue English)
-TILE_MAP = {
-    0x7F: " ", # Space
-    0x01: ".", # Floor/Grass
-    0x05: "#", # Wall/Solid
-    0x15: "S", # Stairs
-    0x3E: ">", # Door/Exit
-    0xE1: "P", # PK part of PKMN
-    0xE2: "M", # MN part of PKMN
-    0xEE: "e", # accented e in POKEMON
+VALID_BUTTONS = {
+    BUTTON_A,
+    BUTTON_B,
+    BUTTON_START,
+    BUTTON_SELECT,
+    BUTTON_UP,
+    BUTTON_DOWN,
+    BUTTON_LEFT,
+    BUTTON_RIGHT,
+}
+
+# Tile ID to Character Mapping (Pokemon Blue English font)
+# Maps on-screen tile IDs from wTileMap (0xC3A0) to ASCII/Unicode characters
+CHAR_MAP = {
+    0x7F: " ",  # Space
+    # Window and Dialogue Box Borders
+    0x79: "┌",
+    0x7A: "─",
+    0x7B: "┐",
+    0x7C: "│",
+    0x7D: "└",
+    0x7E: "┘",
+    # UI Elements & Cursors
+    0xED: "▶",  # Menu selection cursor
+    0xEE: "▼",  # Dialogue down arrow
+    0xEC: "▷",
+    # Punctuation & Special Symbols
+    0x6D: ":",
+    0x75: "…",
+    0x9A: "(",
+    0x9B: ")",
+    0x9C: ":",
+    0x9D: ";",
+    0x9E: "[",
+    0x9F: "]",
+    0xBA: "é",
+    0xBB: "'d",
+    0xBC: "'l",
+    0xBD: "'s",
+    0xBE: "'t",
+    0xBF: "'v",
     0xE0: "'",
-    0x52: "<PLAYER>", # Placeholder for player name
-    0x53: "<RIVAL>",  # Placeholder for rival name
-    0x4A: "!",
-    0x4B: ".",
-    0x4E: "?",
-    0x4F: ",",
+    0xE1: "PK",
+    0xE2: "MN",
+    0xE3: "-",
+    0xE4: "'r",
+    0xE5: "'m",
     0xE6: "?",
     0xE7: "!",
     0xE8: ".",
-    0xF3: "-",
-    # Pallet Town / World Tiles
-    0x2C: ".", # Grass/Floor (Pallet)
-    0x39: "F", # Fence / Solid
-    0x23: "W", # Water / Sea
-    0x0B: "#", # Wall / Building
-    0x08: "#", # Wall / Building
-    # Oak's Lab / Interiors
-    0x0F: ".", # Lab Floor
-    0x10: ".", # Lab Floor
-    0x11: "T", # Lab Floor/Table (observed as walkable in Oak's Lab)
-    0x3B: "T", # Lab Table
-    0x5B: "T", # Lab Table (Alt)
-    0x58: "#", # Lab Equipment / Wall
-    0x59: "#", # Lab Equipment / Wall
-    0x29: "o", # Pokéball on table
-    0x2A: "o", # Pokéball on table
+    0xEF: "♂",
+    0xF0: "¥",
+    0xF1: "×",
+    0xF2: ".",
+    0xF3: "/",
+    0xF4: ",",
+    0xF5: "♀",
 }
 
 # Fill A-Z (0x80 - 0x99)
 for i in range(26):
-    TILE_MAP[0x80 + i] = chr(65 + i)
+    CHAR_MAP[0x80 + i] = chr(ord('A') + i)
+
 # Fill a-z (0xA0 - 0xB9)
 for i in range(26):
-    TILE_MAP[0xA0 + i] = chr(97 + i)
+    CHAR_MAP[0xA0 + i] = chr(ord('a') + i)
+
 # Fill 0-9 (0xF6 - 0xFF)
 for i in range(10):
-    TILE_MAP[0xF6 + i] = chr(48 + i)
+    CHAR_MAP[0xF6 + i] = chr(ord('0') + i)
 
-# Semantic Tile Names (for describe_tile)
-TILE_NAMES = {
-    " ": "Floor / Open Space",
-    ".": "Grass / Ground",
-    "#": "Wall / Solid Object",
-    "S": "Stairs (Warp)",
-    ">": "Door / Exit (Warp)",
-    "P": "Pokemon Symbol",
-    "M": "Pokemon Symbol",
-    "T": "Table / Furniture",
-    "o": "Pokéball / Item",
+# Backwards compatibility alias
+TILE_MAP = CHAR_MAP
+
+# Gen 1 Map Names (0 - 247)
+MAP_NAMES = {
+    0: "Pallet Town",
+    1: "Viridian City",
+    2: "Pewter City",
+    3: "Cerulean City",
+    4: "Lavender Town",
+    5: "Vermilion City",
+    6: "Celadon City",
+    7: "Fuchsia City",
+    8: "Cinnabar Island",
+    9: "Indigo Plateau",
+    10: "Saffron City",
+    11: "Unused Map 0b",
+    12: "Route 1",
+    13: "Route 2",
+    14: "Route 3",
+    15: "Route 4",
+    16: "Route 5",
+    17: "Route 6",
+    18: "Route 7",
+    19: "Route 8",
+    20: "Route 9",
+    21: "Route 10",
+    22: "Route 11",
+    23: "Route 12",
+    24: "Route 13",
+    25: "Route 14",
+    26: "Route 15",
+    27: "Route 16",
+    28: "Route 17",
+    29: "Route 18",
+    30: "Route 19",
+    31: "Route 20",
+    32: "Route 21",
+    33: "Route 22",
+    34: "Route 23",
+    35: "Route 24",
+    36: "Route 25",
+    37: "Player's House 1F",
+    38: "Player's House 2F",
+    39: "Rival's House",
+    40: "Oak's Lab",
+    41: "Viridian Pokémon Center",
+    42: "Viridian Poké Mart",
+    43: "Viridian School House",
+    44: "Viridian Nickname House",
+    45: "Viridian Gym",
+    46: "Digletts Cave Route 2",
+    47: "Viridian Forest North Gate",
+    48: "Route 2 Trade House",
+    49: "Route 2 Gate",
+    50: "Viridian Forest South Gate",
+    51: "Viridian Forest",
+    52: "Museum 1F",
+    53: "Museum 2F",
+    54: "Pewter Gym",
+    55: "Pewter Nidoran House",
+    56: "Pewter Poké Mart",
+    57: "Pewter Speech House",
+    58: "Pewter Pokémon Center",
+    59: "Mt Moon 1F",
+    60: "Mt Moon B1F",
+    61: "Mt Moon B2f",
+    62: "Cerulean Trashed House",
+    63: "Cerulean Trade House",
+    64: "Cerulean Pokémon Center",
+    65: "Cerulean Gym",
+    66: "Bike Shop",
+    67: "Cerulean Poké Mart",
+    68: "Mt Moon Pokémon Center",
+    69: "Cerulean Trashed House Copy",
+    70: "Route 5 Gate",
+    71: "Underground Path Route 5",
+    72: "Daycare",
+    73: "Route 6 Gate",
+    74: "Underground Path Route 6",
+    75: "Underground Path Route 6 Copy",
+    76: "Route 7 Gate",
+    77: "Underground Path Route 7",
+    78: "Underground Path Route 7 Copy",
+    79: "Route 8 Gate",
+    80: "Underground Path Route 8",
+    81: "Rock Tunnel Pokémon Center",
+    82: "Rock Tunnel 1F",
+    83: "Power Plant",
+    84: "Route 11 Gate 1F",
+    85: "Digletts Cave Route 11",
+    86: "Route 11 Gate 2F",
+    87: "Route 12 Gate 1F",
+    88: "Bills House",
+    89: "Vermilion Pokémon Center",
+    90: "Pokemon Fan Club",
+    91: "Vermilion Poké Mart",
+    92: "Vermilion Gym",
+    93: "Vermilion Pidgey House",
+    94: "Vermilion Dock",
+    95: "Ss Anne 1F",
+    96: "Ss Anne 2F",
+    97: "Ss Anne 3F",
+    98: "Ss Anne B1F",
+    99: "Ss Anne Bow",
+    100: "Ss Anne Kitchen",
+    101: "Ss Anne Captains Room",
+    102: "Ss Anne 1F Rooms",
+    103: "Ss Anne 2F Rooms",
+    104: "Ss Anne B1F Rooms",
+    105: "Unused Map 69",
+    106: "Unused Map 6a",
+    107: "Unused Map 6b",
+    108: "Victory Road 1F",
+    109: "Unused Map 6d",
+    110: "Unused Map 6e",
+    111: "Unused Map 6F",
+    112: "Unused Map 70",
+    113: "Lances Room",
+    114: "Unused Map 72",
+    115: "Unused Map 73",
+    116: "Unused Map 74",
+    117: "Unused Map 75",
+    118: "Hall Of Fame",
+    119: "Underground Path North South",
+    120: "Champions Room",
+    121: "Underground Path West East",
+    122: "Celadon Poké Mart 1F",
+    123: "Celadon Poké Mart 2F",
+    124: "Celadon Poké Mart 3F",
+    125: "Celadon Poké Mart 4F",
+    126: "Celadon Poké Mart Roof",
+    127: "Celadon Poké Mart Elevator",
+    128: "Celadon Mansion 1F",
+    129: "Celadon Mansion 2F",
+    130: "Celadon Mansion 3F",
+    131: "Celadon Mansion Roof",
+    132: "Celadon Mansion Roof House",
+    133: "Celadon Pokémon Center",
+    134: "Celadon Gym",
+    135: "Game Corner",
+    136: "Celadon Poké Mart 5F",
+    137: "Game Corner Prize Room",
+    138: "Celadon Diner",
+    139: "Celadon Chief House",
+    140: "Celadon Hotel",
+    141: "Lavender Pokémon Center",
+    142: "Pokemon Tower 1F",
+    143: "Pokemon Tower 2F",
+    144: "Pokemon Tower 3F",
+    145: "Pokemon Tower 4F",
+    146: "Pokemon Tower 5F",
+    147: "Pokemon Tower 6F",
+    148: "Pokemon Tower 7F",
+    149: "Mr Fujis House",
+    150: "Lavender Poké Mart",
+    151: "Lavender Cubone House",
+    152: "Fuchsia Poké Mart",
+    153: "Fuchsia Bills Grandpas House",
+    154: "Fuchsia Pokémon Center",
+    155: "Wardens House",
+    156: "Safari Zone Gate",
+    157: "Fuchsia Gym",
+    158: "Fuchsia Meeting Room",
+    159: "Seafoam Islands B1F",
+    160: "Seafoam Islands B2f",
+    161: "Seafoam Islands B3f",
+    162: "Seafoam Islands B4f",
+    163: "Vermilion Old Rod House",
+    164: "Fuchsia Good Rod House",
+    165: "Pokemon Mansion 1F",
+    166: "Cinnabar Gym",
+    167: "Cinnabar Lab",
+    168: "Cinnabar Lab Trade Room",
+    169: "Cinnabar Lab Metronome Room",
+    170: "Cinnabar Lab Fossil Room",
+    171: "Cinnabar Pokémon Center",
+    172: "Cinnabar Poké Mart",
+    173: "Cinnabar Poké Mart Copy",
+    174: "Indigo Plateau Lobby",
+    175: "Copycats House 1F",
+    176: "Copycats House 2F",
+    177: "Fighting Dojo",
+    178: "Saffron Gym",
+    179: "Saffron Pidgey House",
+    180: "Saffron Poké Mart",
+    181: "Silph Co 1F",
+    182: "Saffron Pokémon Center",
+    183: "Mr Psychics House",
+    184: "Route 15 Gate 1F",
+    185: "Route 15 Gate 2F",
+    186: "Route 16 Gate 1F",
+    187: "Route 16 Gate 2F",
+    188: "Route 16 Fly House",
+    189: "Route 12 Super Rod House",
+    190: "Route 18 Gate 1F",
+    191: "Route 18 Gate 2F",
+    192: "Seafoam Islands 1F",
+    193: "Route 22 Gate",
+    194: "Victory Road 2F",
+    195: "Route 12 Gate 2F",
+    196: "Vermilion Trade House",
+    197: "Digletts Cave",
+    198: "Victory Road 3F",
+    199: "Rocket Hideout B1F",
+    200: "Rocket Hideout B2f",
+    201: "Rocket Hideout B3f",
+    202: "Rocket Hideout B4f",
+    203: "Rocket Hideout Elevator",
+    204: "Unused Map Cc",
+    205: "Unused Map Cd",
+    206: "Unused Map Ce",
+    207: "Silph Co 2F",
+    208: "Silph Co 3F",
+    209: "Silph Co 4F",
+    210: "Silph Co 5F",
+    211: "Silph Co 6F",
+    212: "Silph Co 7F",
+    213: "Silph Co 8F",
+    214: "Pokemon Mansion 2F",
+    215: "Pokemon Mansion 3F",
+    216: "Pokemon Mansion B1F",
+    217: "Safari Zone East",
+    218: "Safari Zone North",
+    219: "Safari Zone West",
+    220: "Safari Zone Center",
+    221: "Safari Zone Center Rest House",
+    222: "Safari Zone Secret House",
+    223: "Safari Zone West Rest House",
+    224: "Safari Zone East Rest House",
+    225: "Safari Zone North Rest House",
+    226: "Cerulean Cave 2F",
+    227: "Cerulean Cave B1F",
+    228: "Cerulean Cave 1F",
+    229: "Name Raters House",
+    230: "Cerulean Badge House",
+    231: "Unused Map E7",
+    232: "Rock Tunnel B1F",
+    233: "Silph Co 9F",
+    234: "Silph Co 10F",
+    235: "Silph Co 11F",
+    236: "Silph Co Elevator",
+    237: "Unused Map Ed",
+    238: "Unused Map Ee",
+    239: "Trade Center",
+    240: "Colosseum",
+    241: "Unused Map F1",
+    242: "Unused Map F2",
+    243: "Unused Map F3",
+    244: "Unused Map F4",
+    245: "Loreleis Room",
+    246: "Brunos Room",
+    247: "Agathas Room",
 }
-
-GRID_LEGEND = "#:Wall, .:Floor, S:Stairs, >:Door, T:Table, o:Pokéball"
-
-WALKABLE_CHARS = {".", " ", "S", ">"}
-
-# Tile ID walkability overrides (used to correct misclassified tiles at runtime).
-# These should be extended based on observed tile IDs from debug output.
-WALKABLE_TILE_IDS = set()
-NON_WALKABLE_TILE_IDS = set()
-
-# Per-map walkability overrides. Useful when a tile ID is context-dependent.
-# Map ID 40 = Oak's Lab: observed 0x11 appears walkable where the player stands.
-MAP_WALKABLE_TILE_IDS = {
-    40: {0x11},
-}
-MAP_NON_WALKABLE_TILE_IDS = {}

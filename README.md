@@ -1,105 +1,138 @@
 # Pokémon Blue Strategic MCP Server
 
-> [!WARNING]
-> **Project Status: Abandoned (Active Archive)**  
-> This project is currently on pause. While the tactical interface and RAM monitoring are robust, AI agents (Antigravity, etc.) struggle immensely with the nuanced navigation required for Pokémon Blue. Despite frequent improvements to the A* pathfinding and collision tools, agents often waste excessive tokens walking in circles or failing to navigate simple obstacles. I am "giving up" on this for now, but leaving the code as a reference for MCP development in complex environments.
-
-> [!NOTE]
-> **AI Authorship Disclaimer**  
-> This codebase was primarily generated and modified using AI coding assistants (**Antigravity**, **GeminiCLI**, and **codex**). As such, you may encounter "garbage" code, redundant logic, or experimental scaffolding that remains in the repository.
-
-## 🌟 Overview
-An **MCP (Model Context Protocol)** server that acts as a tactical interface for Pokémon Blue (GameBoy). it enables an LLM agent to play the game by issuing high-level strategic commands while the server handles the frame-perfect execution and RAM monitoring.
+An **MCP (Model Context Protocol)** server that enables autonomous AI agents (Antigravity, Claude, Codex, etc.) to play **Pokémon Blue (Game Boy)** via a streamlined, deterministic, vision-first interface.
 
 ---
 
-## 🚀 Features
-- **Tactical Interface**: Abstracts low-level button presses into high-level commands like `walk_to(x, y)` and `execute_battle_turn()`.
-- **Memory-Driven Vision**: Provides screenshots (`get_screen_analysis`) with coordinate overlays and OCR to help the agent "see".
-- **Collision Intelligence**: Real-time RAM inspection of collision maps to determine walkability accurately.
-- **Auto-Checkpointing**: Automatically saves game state before major actions to allow for easy recovery.
-- **Save/Load States**: Full management of emulator states for retrying strategies.
-- **Journaling**: A persistent memory system (`game_journal.json`) to track progress between sessions.
+## 🌟 Overview
+
+Previous AI Game Boy agents often struggled with navigation and stalled in loops because they relied on fragile reverse-engineered collision tables, inaccurate A\* pathfinders, or noisy OCR overlays.
+
+This server redesigns agent interaction around **three core principles**:
+
+1. **Vision-First, Ground-Truth Perceptual Space**: Provides clean, unobscured 4× nearest-neighbor screenshots (`640x576`) paired with direct Game Boy tilemap ASCII extraction (`screen_text`) for 100% reliable text and menu perception without OCR errors or latency.
+2. **The Game Boy is the Physics Engine**: Rather than re-implementing collision and pathfinding in Python, the emulator (PyBoy) simulates authentic Z80 hardware collision, ledges, and scripts.
+3. **Minimal, Orthogonal Tool Surface**: Consolidates control into **5 high-leverage tools** designed for deterministic decision-making.
+
+---
+
+## 🎮 Exposed Tools
+
+| Tool                                      | Purpose                                                                                                                                                   | Arguments                                                                           | Key Returns                                                                                                                                                              |
+| :---------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`get_state()`**                         | Primary sensory tool. Returns clean 4× upscaled screenshot (`640x576`) + ground-truth tilemap text + telemetry.                                           | None                                                                                | `image_path`, `screen_text`, `map_id`, `map_name`, `position` `[x, y]`, `in_battle`, `dialogue_active`, `menu_active`                                                    |
+| **`step(direction, count)`**              | Verified cardinal movement across the overworld. Respects Gen 1's 16-frame movement grid and turn delay. Halts on obstacles, battles, warps, or dialogue. | `direction` (`"up"`, `"down"`, `"left"`, `"right"`), `count` (1–10, default 1)      | `steps_completed`, `final_position`, `final_map`, `map_id`, `interrupted_by` (`"hit_obstacle"`, `"battle_started"`, `"map_transition"`, `"dialogue_started"`, or `null`) |
+| **`press(buttons, delay_frames)`**        | Fine-grained button execution for menus, naming, battles, and interacting with adjacent objects/NPCs.                                                     | `buttons` (e.g. `["a"]`, `["down", "a"]`, `["start"]`), `delay_frames` (default 15) | `presses`, updated `screen_text`, `in_battle`, `dialogue_active`, `menu_active`                                                                                          |
+| **`advance_dialogue(max_pages)`**         | Fast-forwards through multi-page NPC speech and cutscenes. Captures every page into an ASCII transcript. Halts immediately on prompts or closure.         | `max_pages` (1–10, default 5)                                                       | `pages` (list of transcript pages), `status` (`"dialogue_closed"` or `"prompt_detected"`)                                                                                |
+| **`save_game(name)` / `load_game(name)`** | Reliable emulator state checkpointing and recovery.                                                                                                       | `name` (e.g. `"before_brock"`, `"viridian_city"`)                                   | Confirmation string                                                                                                                                                      |
 
 ---
 
 ## 🛠️ Setup & Installation
 
 ### 1. Prerequisites
-- **Python 3.10+** (tested with Python 3.12)
-- **GameBoy ROM**: You must provide your own legally obtained ROM file of *Pokémon Blue*.
+
+- **Python 3.10+** (tested on Python 3.12 and 3.13)
+- **Game Boy ROM**: You must provide your own legally obtained ROM file of _Pokémon Blue_.
 
 ### 2. Installation
-1.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/beefan/pokemon-mcp.git
-    cd pokemon-mcp
-    ```
-2.  **Initialize Environment**:
-    ```bash
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
-    ```
-3.  **ROM Placement**:
-    Place your Pokémon Blue ROM in the root directory and rename it to `PokemonBlue.gb`.
 
-4.  **Mission Setup**:
-    Ensure `MISSION.md` is present in the root. This is the primary instruction file the agent reads to understand its goals.
+1. **Clone the Repository**:
 
-### 3. Running the Server
+   ```bash
+   git clone https://github.com/beefan/pokemon-mcp.git
+   cd pokemon-mcp
+   ```
 
-While you can run the server manually, it is designed to be managed by your AI coding agent. This ensures the server starts automatically when you begin a session and environment variables (like `HEADLESS`) are set correctly.
+2. **Initialize Virtual Environment**:
 
-#### Codex Integration (`~/.codex/config.toml`)
-Add the following to your Codex configuration:
-```toml
-[mcp_servers.pokemon-blue]
-command = "/path/to/pokemon-mcp/.venv/bin/python"
-args = ["/path/to/pokemon-mcp/server.py"]
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
 
-[mcp_servers.pokemon-blue.env]
-HEADLESS = "false"  # Set to "true" for faster, windowless execution
-```
+3. **ROM Placement**:
+   Place your Pokémon Blue ROM in the project root and name it `PokemonBlue.gb`:
 
-#### Gemini CLI Integration (`~/.gemini/settings.json`)
-Add the following to your `mcpServers` block:
+   ```bash
+   ls PokemonBlue.gb
+   ```
+
+4. **Verify Tests**:
+   Run the test suite to verify emulator and tool functionality:
+   ```bash
+   ./.venv/bin/python -m unittest discover tests
+   ```
+
+---
+
+## 🤖 MCP Client Configuration
+
+### Antigravity / Gemini CLI (`mcp_config.json` or `settings.json`)
+
+Add the server under `mcpServers`:
+
 ```json
-"pokemon-blue": {
-  "command": "/path/to/pokemon-mcp/.venv/bin/python",
-  "args": [
-    "/path/to/pokemon-mcp/server.py"
-  ],
-  "env": {
-    "HEADLESS": "false"
+{
+  "mcpServers": {
+    "pokemon-blue": {
+      "command": "/absolute/path/to/pokemon-mcp/.venv/bin/python",
+      "args": ["/absolute/path/to/pokemon-mcp/server.py"],
+      "env": {
+        "HEADLESS": "false"
+      }
+    }
   }
 }
 ```
 
-## 🎮 Exposed Tools
+### Claude Desktop (`claude_desktop_config.json`)
 
-| Tool | Description |
-| :--- | :--- |
-| `get_screen_analysis` | **Primary Vision**. Returns a screenshot with a coordinate grid overlay. |
-| `get_player_status` | Returns current Map ID, (X, Y) coordinates, and nearby POIs. |
-| `walk_to(x, y)` | Navigates to a specific map coordinate using A* pathfinding. |
-| `move_direction(dir, steps)` | Moves the player in a cardinal direction for X steps. |
-| `interact_with(x, y)` | Walks to and interacts with an object (NPC, Item, PC). |
-| `advance_dialogue` | Mashes A/B buttons until the current text box/dialogue is cleared. |
-| `execute_battle_turn` | issues high-level battle commands (Attack, Switch, Item). |
-| `get_party_info` | Returns current Pokémon team stats (HP, Level, Moves). |
-| `get_collision_grid` | Returns a boolean grid of walkable tiles centered on the player. |
-| `save_game / load_game` | Captures or restores the full emulator state. |
-| `read_journal` | Accesses the persistent `game_journal.json` for task tracking. |
+```json
+{
+  "mcpServers": {
+    "pokemon-blue": {
+      "command": "/absolute/path/to/pokemon-mcp/.venv/bin/python",
+      "args": ["/absolute/path/to/pokemon-mcp/server.py"],
+      "env": {
+        "HEADLESS": "false"
+      }
+    }
+  }
+}
+```
+
+> [!TIP]
+>
+> - Set `"HEADLESS": "false"` to open the native SDL2 emulator window and watch the AI play in real time.
+> - Set `"HEADLESS": "true"` for maximum emulation speed and headless operation (e.g. on remote servers).
+
+---
+
+## 🧭 Playing the Game
+
+The agent is guided by [`MISSION.md`](MISSION.md), which provides campaign milestones from Pallet Town through the Elite Four:
+
+1. **Sensory Loop**: The agent inspects visual reality using `get_state()`.
+2. **Cardinal Navigation**: Overworld movement uses `step("direction", count)`. If the player bumps into a wall, enters a doorway, encounters a Pokémon, or triggers an NPC, `step` halts safely and reports the event.
+3. **Dialogue Clearance**: Cutscenes and speech are fast-forwarded with `advance_dialogue()`, which automatically captures page transcripts and halts on choice prompts (YES/NO, naming, starter selection).
+4. **Menus & Combat**: Battles, item use, and party menus are operated deterministically using `press(["buttons"])`.
 
 ---
 
 ## 💻 Tech Stack
-- **Framework**: [FastMCP](https://github.com/jlowin/fastmcp) (Python)
-- **Emulator**: [PyBoy](https://github.com/Baekalfen/PyBoy)
-- **Logic**: Custom A* implementation and RAM address mapping for Gen 1 Pokémon.
+
+- **MCP Framework**: [FastMCP](https://github.com/jlowin/fastmcp) (Python)
+- **Emulator Core**: [PyBoy](https://github.com/Baekalfen/PyBoy) (Cycle-accurate Game Boy emulation)
+- **Imaging**: [Pillow](https://python-pillow.org/) (Nearest-neighbor 4× scaling to 640×576)
+- **ROM Target**: _Pokémon Blue_ (Game Boy, US / English release)
+
+---
 
 ## ⚖️ Legal Disclaimer
-This project is an automation tool for GameBoy emulation. It does **not** include any Nintendo software, ROMs, or copyrighted assets.
-- **You must provide your own ROM file.**
-- Pokémon is a trademark of Nintendo/Creatures Inc./GAME FREAK inc. This project is not affiliated with or endorsed by Nintendo.
+
+This project is an automation interface for Game Boy emulation research. It does **not** distribute or include Nintendo software, ROMs, or copyrighted game assets.
+
+- **You must supply your own legally acquired ROM file.**
+- Pokémon is a registered trademark of Nintendo, Creatures Inc., and GAME FREAK inc. This project is unaffiliated with, unauthorized by, and unendorsed by Nintendo or GAME FREAK.

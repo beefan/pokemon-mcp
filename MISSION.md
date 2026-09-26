@@ -1,108 +1,106 @@
-# MISSION: The Pallet Town Arrival
+# MISSION: The Kanto Championship Campaign
 
 > [!IMPORTANT]
-> **MCP Technical Status**: This server is currently in active development. If the provided tools are unsuitable or insufficient for your tactical objectives, you are encouraged to directly modify the codebase or suggest architectural changes. **Note**: If you modify the MCP server code (e.g., `server.py`, `src/*.py`), you MUST ask the user to restart the MCP server for the changes to take effect.
-
-## Primary Objective
-Successfully arrive in your bedroom in Pallet Town and then exit the house.
-
-## 🚨 CRITICAL: Recovery Procedure (ALWAYS DO THIS FIRST)
-**Before doing anything else, you must attempt to load an existing game.**
-
-1. **Read Journal**: Call `read_journal()` to see the last known state.
-2. **List Saves**: Call `list_dir` on the `saves/` directory.
-    - **NOTE**: The `saves/` directory is listed in `.gitignore`, but it **DOES CONTAIN** valid save files. You **MUST** check it.
-    - **IF FILES EXIST**: You **MUST** load the most recent `.state` file (check timestamps).
-    - Call `load_game(name='...')` (e.g., `load_game('auto_20260209T120000Z')`).
-    - After loading, call `get_player_status()` to verify your location.
-    - **SKIP TO SUBSEQUENT PHASES** based on your location.
-3. **IF AND ONLY IF** the `saves/` directory is **EMPTY**:
-    - Proceed to "Phase 0: New Game Setup".
+> **MCP Interface**: This server runs on a streamlined, deterministic 5-tool visual interface.
+> Direct Game Boy hardware simulation, 4× crisp nearest-neighbor visuals (`screen.png`), and zero-latency tilemap ASCII text extraction (`screen_text`) replace fragile macro scripts and collision maps.
 
 ---
 
-## Phase 0: New Game Setup (ONLY IF NO SAVES EXIST)
-1. **Start Game**: Use `get_screen_analysis` to identify the Title screen. Press `start`, then select `NEW GAME`.
-2. **Oak's Intro**: Use `advance_dialogue()` to mash through Oak's lecture. 
-3. **Naming**: Use `press_buttons('start, wait, a')` to accept the default name.
-4. **Bedroom Arrival**: Verify you are in Map ID 38. 
-    - **SAVE THE GAME**: Call `save_game(name='arrived_in_bedroom')`.
+## Tactical Interface (The 5 Core Tools)
 
-## Phase 1: The Bedroom & House
-1. **Verification**: Call `get_player_status`. 
-2. **Leaving Bedroom (Map 38)**:
-    - Pathfind to the stairs at **(7, 1)**.
-    - Use `walk_to(7, 1)` to automatically navigate to the stairs.
-    - Use `move_direction` to step **ON TO** the stairs if `walk_to` stops adjacent.
-3. **Leaving House (Map 37)**:
-    - Use `get_local_map()` to find the door coordinates (usually near the bottom).
-    - Use `walk_to(x, y)` to reach the exit mat.
-4. **Result**: You should arrive in Pallet Town (Map 0).
+| Tool | Purpose | Arguments | Key Returns |
+| :--- | :--- | :--- | :--- |
+| **`get_state()`** | Primary sensory tool. Clean 4× upscaled screenshot (`640x576`) + ground-truth tilemap text + telemetry. | None | `image_path`, `screen_text`, `map_id`, `map_name`, `position` `[x, y]`, `in_battle`, `dialogue_active`, `menu_active` |
+| **`step(direction, count)`** | Verified cardinal movement across the overworld. Halts on obstacles, battles, warps, or dialogue. | `direction` (`"up"`, `"down"`, `"left"`, `"right"`), `count` (1–10, default 1) | `steps_completed`, `final_position`, `final_map`, `interrupted_by` (`"hit_obstacle"`, `"battle_started"`, `"map_transition"`, `"dialogue_started"`, or `null`) |
+| **`press(buttons, delay_frames)`** | Precise button execution for menus, naming, combat, and interacting with objects/NPCs directly in front of you. | `buttons` (e.g. `["a"]`, `["down", "a"]`, `["start"]`), `delay_frames` (default 15) | `presses`, updated `screen_text`, `in_battle`, `dialogue_active`, `menu_active` |
+| **`advance_dialogue(max_pages)`** | Fast-forwards through multi-page speech and cutscenes. Captures every page into an ASCII transcript. Halts on prompts or closure. | `max_pages` (1–10, default 5) | `pages` (list of transcript pages), `status` (`"dialogue_closed"` or `"prompt_detected"`) |
+| **`save_game(name)` / `load_game(name)`** | Reliable emulator state checkpointing and recovery. | `name` (e.g. `"before_brock"`, `"route_1"`) | Confirmation string |
 
-## Phase 2: Oak's Lab & Selecting a Partner
-1. **Clear Initial Dialogue**: Use `advance_dialogue()` until Oak stops talking and stands near the Pokéball tables.
-2. **Observation Phase**: 
-    - Verify you are in Map ID 40 (Oak's Lab).
-    - Use `get_local_map()` to identify the walkable path to the table.
-    - Use `get_screen_analysis()` to visualy ID the Pokéballs. Note their grid coordinates (x, y).
-3. **Execution Phase**:
-    - Use `interact_with(x, y)` on the Pokéball's map coordinates.
-    - **Note**: This tool will automatically walk you to the nearest side of the table and interact.
+---
 
-## Phase 3: Route 1 & Viridian City
-1. **Traverse Route 1**: 
-    - Use `get_local_map(radius=10)` to scan a large area ahead.
-    - Identify open paths through the ledges. **Note**: Ledges are one-way (jump down). You cannot walk up them.
-    - Use `walk_to(x, y, on_battle='run')` to move through the route efficiently.
-2. **Handle POIs**: If you encounter an NPC, use `get_screen_analysis()` to identify them.
+## Standard Operating Procedure
 
-# Tactical Tool Inventory
+1. **Observe Before Acting**:
+   - Call `get_state()` to inspect visual terrain, menus, dialogue boxes, and ground-truth `screen_text`.
+   - The Game Boy handles world collision. If an obstacle, ledge, or wall blocks you, `step` halts immediately with `"hit_obstacle"`.
+2. **Interactions**:
+   - To talk to NPCs, heal at Pokémon Centers, shop at Poké Marts, or inspect objects (signs, PCs, items, Gym statues), step directly adjacent facing the target and call `press(["a"])`.
+3. **Dialogue & Cutscenes**:
+   - Whenever `dialogue_active` is `true`, call `advance_dialogue(max_pages=5)`.
+   - If `status` is `"prompt_detected"` (e.g. YES/NO prompts, item choices, nicknames), check `screen_text` with `get_state()` and decide your action with `press(buttons)`.
+4. **Combat & Party Management**:
+   - Combat is executed directly via `press`:
+     - Attack: `press(["a", "a"])` selects `FIGHT` and uses Move 1.
+     - Move Selection: `press(["a", "<dir>", "a"])` chooses alternative moves.
+     - Items / Potions: Open `ITEM` to restore HP during tough battles.
+     - Running: `press(["right", "down", "a"])` flees wild encounters when conserving HP.
+   - Heal regularly at Pokémon Centers (`press(["a"])` at the front desk nurse) to avoid blacking out.
+5. **Checkpoints**:
+   - Save frequently at key milestones and before every Gym Leader with `save_game("name")`.
 
-The following tools are at your disposal. Choosing the right one is the difference between a Junior Trainer and a Pokémon Master.
+---
 
-## 0. Navigation Memory & The Journal (The "Memory")
-The MCP server automatically logs all navigation attempts to the Game Journal. 
+## Campaign Objective
 
-| Tool | Usage for Navigation |
-| :--- | :--- |
-| `read_journal()` | **CRITICAL**. Call this if you get stuck or restart. Look for `NavLog` entries. |
-| `write_journal_entry()`| Use this to log strategic notes (e.g., "Found a path around the ledge at (10,13)"). |
+**Ultimate Goal**: Conquer all 8 Kanto Gyms, traverse Victory Road, defeat the Elite Four and the Champion (Rival), and enter the Hall of Fame. Do not stop at Viridian City.
 
-### How to use NavLogs:
-- **`BLOCKED at (x, y)`**: If you see this in the journal, do not try to walk to or through that coordinate again in the same map.
-- **`map_transition`**: You have successfully moved to a new area.
+---
 
-## 1. Vision & Observation (The "Eyes")
+## Campaign Roadmap & Key Milestones
 
-| Tool | When to Use | Trade-offs |
-| :--- | :--- | :--- |
-| `get_local_map(radius)` | **PRIMARY MAPPING**. Scans the ROM for true collision data. | **Pro**: Shows exactly where you can walk. IDs Ledges. **Con**: No visual sprites. |
-| `get_screen_analysis()` | **VISUAL CONFIRMATION**. Captures screen & overlays a grid. | **Pro**: Visual reality. specific coordinates. **Con**: High token cost to read. |
-| `get_player_status()` | Quick check of Map ID and coordinates. | **Pro**: Fast. **Con**: No environmental data. |
+### Milestone 0: New Game & Pallet Town Departure
+- **Intro & Naming**: Advance Oak's intro, select names (`BLUE` / `RED`), clear speech into bedroom (`Player's House 2F`, Map 38, Pos `[3, 6]`).
+- **House Exit**: Move right to `[5, 6]`, up to `[5, 1]`, right onto stairs to 1F. Down hallway to `[7, 7]`, left to `[3, 7]`, down door into Pallet Town (Map 0).
+- **Oak's Lab**: Walk north to grass to trigger Oak. Choose your starter Pokémon (Charmander, Squirtle, or Bulbasaur). Defeat Rival in the lab battle.
+- **Route 1**: Travel north through Route 1 to Viridian City.
 
-## 2. Navigation (The "Legs")
+### Milestone 1: Oak's Parcel & The Pokédex
+- **Viridian Poké Mart**: Talk to the clerk to receive **Oak's Parcel**.
+- **Return to Pallet Town**: Deliver the parcel to Professor Oak in his lab to receive the **Pokédex** and Poké Balls.
+- **Rival's House**: Speak with Daisy (Rival's sister) to receive the **Town Map**.
 
-| Tool | When to Use | Trade-offs |
-| :--- | :--- | :--- |
-| `walk_to(x, y)` | **LONG-RANGE AUTO-PILOT**. Navigate to map coordinates. | **Pro**: Uses Deep Map A* pathfinding. Avoids ledges. **Con**: Stops on battle. |
-| `move_direction(dir, steps)` | **PRECISION MOVEMENT**. Move X steps. | **Pro**: High-fidelity verification (X, Y, Visual Hash). **Con**: Manual pathing. |
-| `interact_with(x, y)` | **REQUIRED** for objects (Pokéballs, PCs, Signs, talking to people). | **Pro**: Auto-approach and face. **Con**: Short range. |
+### Milestone 2: The Boulder Badge (Pewter City)
+- **Viridian Forest**: Head north from Viridian City through the gatehouse into Viridian Forest. Navigate bug catchers and reach Pewter City.
+- **Pewter Gym**: Defeat Gym Leader **Brock** (Rock-type) for the **Boulder Badge** and TM34 (Bide).
 
-## 3. Communication & State (The "Brain")
+### Milestone 3: The Cascade Badge (Cerulean City)
+- **Route 3 & Mt. Moon**: Head east from Pewter City across Route 3, buy Magikarp if desired, traverse Mt. Moon, defeat Team Rocket grunts, and claim a fossil.
+- **Cerulean City & Nugget Bridge**: Defeat Rival on Route 24, conquer the 5 trainers of Nugget Bridge, and visit Bill at his Sea Cottage on Route 25 to receive the **S.S. Ticket**.
+- **Cerulean Gym**: Defeat Gym Leader **Misty** (Water-type) for the **Cascade Badge** and TM11 (BubbleBeam).
 
-| Tool | When to Use | Trade-offs |
-| :--- | :--- | :--- |
-| `advance_dialogue()` | **REQUIRED** for any long cutscene or professor lecture. | **Pro**: Clears all text safely. **Con**: You can't read the text while it's mashing. |
-| `read_journal()` | Recovering context. | **Pro**: Keeps you on track. |
+### Milestone 4: The Thunder Badge (Vermilion City)
+- **Route 5 & Underground Path**: Head south from Cerulean City to Vermilion City.
+- **S.S. Anne**: Board the luxury cruise ship, battle Rival, and speak with the seasick Captain to receive **HM01 (Cut)**. Teach Cut to a compatible team member.
+- **Vermilion Gym**: Cut the slender tree, solve the trash can puzzle, and defeat Gym Leader **Lt. Surge** (Electric-type) for the **Thunder Badge**.
 
-## 4. Low-Level Control (The "Hands")
+### Milestone 5: The Rainbow & Soul Badges (Celadon & Fuchsia)
+- **Rock Tunnel**: Travel east through Route 9 and darkness of Rock Tunnel (or use Flash) to Lavender Town.
+- **Celadon City**: Head west to Celadon City. Obtain the Coin Case, explore the Department Store, infiltrate Team Rocket's Game Corner Hideout to defeat Giovanni and obtain the **Silph Scope**.
+- **Celadon Gym**: Defeat Gym Leader **Erika** (Grass-type) for the **Rainbow Badge**.
+- **Pokémon Tower**: Return to Lavender Town, ascend Pokémon Tower using the Silph Scope, rescue Mr. Fuji, and receive the **Poké Flute**.
+- **Cycling Road & Fuchsia City**: Wake Snorlax with the Poké Flute on Route 16 or 12. Head down Cycling Road (Route 17) to Fuchsia City.
+- **Safari Zone**: Retrieve the Gold Teeth and receive **HM03 (Surf)** and **HM04 (Strength)**. Deliver Gold Teeth to the Warden.
+- **Fuchsia Gym**: Defeat Gym Leader **Koga** (Poison-type) for the **Soul Badge**.
 
-| Tool | When to Use | Trade-offs |
-| :--- | :--- | :--- |
-| `press_button(btn)` | Single taps. | **Pro**: Simple. **Con**: High risk if overused. |
+### Milestone 6: The Marsh & Volcano Badges (Saffron & Cinnabar)
+- **Silph Co. & Saffron City**: Give Tea/Drink to the Saffron guards. Liberate the 11-floor Silph Co. headquarters from Team Rocket, receive the Master Ball from the President, and defeat Rival and Giovanni.
+- **Saffron Gym**: Navigate the teleport pads and defeat Gym Leader **Sabrina** (Psychic-type) for the **Marsh Badge**.
+- **Sea Routes 19–20 & Cinnabar Island**: Surf south from Fuchsia or Pallet Town to Cinnabar Island.
+- **Pokémon Mansion**: Explore the burnt mansion to locate the Secret Key.
+- **Cinnabar Gym**: Unlock the gym, answer quiz machines or battle trainers, and defeat Gym Leader **Blaine** (Fire-type) for the **Volcano Badge**.
 
-## Commanding Officer Protocol
-- **Survey-First**: Always call `get_local_map()` first to understand the terrain (walls, ledges).
-- **Plan**: Choose a target coordinate (x, y) that is reachable.
-- **Execute**: Use `walk_to(x, y)` to travel there.
-- **Interact**: Use `interact_with` for objects you identify.
+### Milestone 7: The Earth Badge (Viridian Gym)
+- **Return to Viridian**: The locked Viridian Gym is now open.
+- **Viridian Gym**: Navigate spinner tiles and defeat Gym Leader **Giovanni** (Ground-type) for the 8th and final **Earth Badge**.
+
+### Milestone 8: Route 22, Victory Road & The Pokémon League
+- **Route 22 & 23 Badge Check**: Head west from Viridian City, defeat Rival on Route 22, and pass through the 8 Badge Check gates on Route 23.
+- **Victory Road**: Traverse the cavern using Strength on boulders to depress switches and open barriers. Exit to the **Indigo Plateau**.
+- **Final Preparation**: Heal your team, stock up on Full Restores and Revives at the Indigo Plateau Mart, and save your game (`save_game("indigo_plateau_entry")`).
+- **The Elite Four & Champion**:
+  1. **Lorelei** (Ice / Water)
+  2. **Bruno** (Fighting / Rock)
+  3. **Agatha** (Ghost / Poison)
+  4. **Lance** (Dragon)
+  5. **Champion (Rival)**: Defeat your Rival in the ultimate battle.
+- **Hall of Fame**: Follow Professor Oak into the Hall of Fame chamber to register your team and complete the game!
